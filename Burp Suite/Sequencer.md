@@ -1,0 +1,1 @@
+**Burp Sequencer** is used to analyse the quality of randomness in tokens and other unpredictable values. It helps you assess whether session tokens, reset tokens, or similar values are actually unpredictable enough to resist guessing or prediction.

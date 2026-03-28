@@ -1,0 +1,14 @@
+| Indicator                                                                  | Use Python Version   | Notes                                                                               |
+| -------------------------------------------------------------------------- | -------------------- | ----------------------------------------------------------------------------------- |
+| **Script date older than ~2018**                                           | Python 2             | Python 2 was still widely used; most exploits use Python 2 syntax and libraries.    |
+| **Script date 2018 or newer**                                              | Python 3             | Python 3 adoption increased; newer exploits likely use Python 3 syntax and modules. |
+| Shebang line: `#!/usr/bin/python` or `#!/usr/bin/env python` (without `3`) | Python 2             | Default to Python 2 for older-style shebang lines.                                  |
+| Shebang line: `#!/usr/bin/python3` or `#!/usr/bin/env python3`             | Python 3             | Explicitly Python 3.                                                                |
+| Uses Python 2-only modules (`urllib2`, `ConfigParser`, `StringIO`)         | Python 2             | These modules were renamed or removed in Python 3.                                  |
+| Uses Python 3 modules (`urllib.request`, `configparser`, `io`)             | Python 3             | Python 3 reorganized standard libraries.                                            |
+| Print statements without parentheses (`print "text"`)                      | Python 2             | Python 3 requires parentheses: `print("text")`.                                     |
+| Print statements with parentheses (`print("text")`)                        | Usually Python 3     | Could be Python 2 with future imports but mostly Python 3.                          |
+| Uses `xrange()`                                                            | Python 2             | Renamed to `range()` in Python 3.                                                   |
+| Uses `input()` expecting raw input (like `raw_input()` in Python 2)        | Python 3             | `raw_input()` was renamed to `input()` in Python 3.                                 |
+| Comments or documentation specify Python version                           | Follow documentation | Always trust the author's stated requirements.                                      |
+| No date or clues, but syntax looks modern                                  | Try Python 3         | Python 3 is now the default in Kali and most environments.                          |
