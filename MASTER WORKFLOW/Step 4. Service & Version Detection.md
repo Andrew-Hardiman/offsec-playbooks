@@ -2,7 +2,7 @@
 
 - **Run a focused Nmap service detection scan on discovered ports**:  
     `sudo nmap -sC -sV -p <comma_separated_open_ports> <target_ip>`
-    - **If services are detected**: Move to Step 4: Vulnerability Analysis.
+    - **If services are detected**: Move to [[Step 5. Vulnerability Analysis]]
     - **If no services detected**:
         - Try running Nmap with different scripts to detect more services:  
             `sudo nmap -p 80,443 --script=http-enum <target_ip>`

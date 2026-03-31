@@ -30,6 +30,8 @@ Use `Certificate Search` [[Useful Websites (Web App Pen Testing)]]
 
 Search engines contain trillions of links to more than a billion websites, which can be an excellent resource for finding new subdomains. Using advanced search methods on websites like Google, such as the `site: filter`, can narrow the search results. For example, `site:*.domain.com -site:www.domain.com` would only contain results leading to the domain name domain.com but exclude any links to www.domain.com; therefore, it shows us only subdomain names belonging to domain.com.
 
+## 3. DNSDumpster
 
-
-
+- Site: [https://dnsdumpster.com](https://dnsdumpster.com)
+- Input domain → enumerate subdomains, hosts, DNS records
+- Record everything returned. **Of particular importance for iterative reconnaissance, are subdomains**

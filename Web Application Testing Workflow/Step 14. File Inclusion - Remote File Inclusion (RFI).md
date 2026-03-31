@@ -148,5 +148,5 @@ On Kali (or your attacking machine):
 
 - RFI is only possible if `allow_url_include = On` in PHP.
     
-- If you can’t include a remote file directly, try **[[Step 12. File Inclusion - Local File Inclusion (LFI)]] → RCE**.
+- If you can’t include a remote file directly, try **[[Step 13. File Inclusion - Local File Inclusion (LFI)]] → RCE**.
     

@@ -1,5 +1,5 @@
 
-**Local File Inclusion (LFI) is similar to Path Traversal in that you can read files on the server using `../` sequences, but the key difference is that LFI passes your input to functions like `include()` or `require()`, meaning you may be able to execute code and achieve Remote Code Execution (RCE) if you can control the contents of an included file, i.e. upload your own file and then execute it through Local File Inclusion [[File Upload]]**
+**Local File Inclusion (LFI) is similar to Path Traversal in that you can read files on the server using `../` sequences, but the key difference is that LFI passes your input to functions like `include()` or `require()`, meaning you may be able to execute code and achieve Remote Code Execution (RCE) if you can control the contents of an included file, i.e. upload your own file and then execute it through Local File Inclusion [[Step 10. File Upload]]**
 
 ---
 
