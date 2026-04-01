@@ -69,7 +69,7 @@ Record:
 
 ---
 
-## Done → Proceed to [[Step 2. Initial Setup]]
+## Done → Proceed to [[MASTER WORKFLOW/Step 2. Scope & Reachability]]
 
 
 
