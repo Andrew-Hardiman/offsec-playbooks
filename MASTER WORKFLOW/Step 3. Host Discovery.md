@@ -12,9 +12,9 @@ If you have a **single IP scope**, you are in the wrong step — go to [[Step 2.
 ### Step 1 — Create working directory and define scope
 
 ```bash
-mkdir -p ~/<engagements>/<target_name>/host_discovery
+mkdir -p ~/<engagements>/<target_name>/
 
-cd ~/<engagements>/<target_name>/host_discovery
+cd ~/<engagements>/<target_name>/
 ```
 
 Define scope — one entry per line. Example:
