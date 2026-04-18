@@ -36,7 +36,7 @@ You might find a URL that has a hashed ID, for example:
 
 `https://example.com/profile/202cb962ac59075b964b07152d234b70`
 
-1. Can you identify the hash [[Identifying Hashes]]
+1. Can you identify the hash [[Identify Data Blob]]
 2. If so, can you crack it [[Cracking Hashes]]
 
 If you manage to identify the hash format, and the crack the hash, you will be able to see the underlying format of the string. For instance, in our example, the hash might represent the user's profile/id number. In which case you can try a different id number, hash it using the identified hash format and potentially exploit the system; gain access to another user's data.

@@ -8,7 +8,7 @@ Basic Syntax
 
 1. What is your hash type?
 
-To discover this please see the note [[Identifying Hashes]] in this folder.
+To discover this please see the note [[Identify Data Blob]].
 
 2. What is the `mode` for the hash type?
 

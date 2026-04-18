@@ -1,49 +1,32 @@
 
-## Before trying to identify a hash
+## Goal
 
-**Do not assume the value is a hash. Prove it first.**
+Route the artefact to:
+-  [[Decoding Encoded Data]]
+-  [[Decrypting Data]]
+-  [[Cracking Hashes]]
+## 1. Does the artifact look like an encoded text layer?
 
-If a string does **not** match a common hash shape, stop and consider whether it is instead:
+**Examples:**
 
-- **encoded** data (for example Base64) [[Identifying Encoded Data]]
-    
-- **encrypted** data [[Identifying Encrypted Data]]
+```test
+- Base64-like: letters, numbers, `+`, `/`, sometimes ending in `=`
+- Base64URL-like: letters, numbers, `-`, `_`, sometimes no padding
+- Hex-like: only `0-9`, `a-f`, `A-F`
+- URL-encoded: lots of `%` sequences like `%2f`, `%3a`, `%20`
+```
 
-**Quick checks before using hash-identification tools**
+- **No** -> continue
+- **Yes** -> go to [[Decoding Encoded Data]] - remember type, e.g. Hex, Base64 etc.
 
-1. **Look at the character set**
-    
-    - Hex-looking only (`0-9`, `a-f`) may be a hash
-        
-    - Contains `+`, `/`, `=` → often **Base64**, not a normal hex hash
-    
-2. **Use context**
-    
-    - Where did the value come from?
-        
-    - Password database? Likely hash
-        
-    - URL/token/API response/app field? Could easily be something else
-        
-3. **Decode before cracking if appropriate**
-    
-    - If it looks like Base64, decode it first and inspect the result [[Identifying Encoded Data]]
+## 2. Is the artifact easily identified as a hash, via ...?
 
-## **1. Example Hashes**
+Go to hashes.com, specifically the `hash_identifier` route: [[Useful Websites (Password Cracking)]]
 
-`hashcat --example-hashes | less`
+- **No** -> continue
+- **Yes** -> go to [[Cracking Hashes]]
 
-or
-
-`hashcat --example-hashes | grep -B 2 -A 10 {"string"}`
-
-The later will find the specific string, and print the line with the string, plus two lines before it and 10 lines after it.
-
-**The output of `hashcat --example-hashes` shows the hash name with the hashing algorithm in parentheses after the name, on the first line.**
-
-## **2. Hash Prefix Table**
-
-**MS Windows passwords are hashed using NTLM, a variant of MD4. They’re visually identical to MD4 and MD5 hashes, so it’s very important to use context to determine the hash type.**
+## 3. Is the artifact easily identified as a hash from the below table...?
 
 | Type          | Prefix                         | Algorithm                                                                                                                                                                                        |
 | ------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -54,14 +37,12 @@ The later will find the specific string, and print the line with the string, plu
 | sha521crypt   | `$6$`                          | sha512crypt is a hash based on SHA-2 with 512-bit output originally developed for GNU libc and commonly used on (older) Linux systems                                                            |
 | SunMD5        | `$md5$`                        | SunMD5 is a hash based on the MD5 algorithm originally developed for Solaris                                                                                                                     |
 | md5crypt      | `$1$`                          | md5crypt is a hash based on the MD5 algorithm originally developed for FreeBSD                                                                                                                   |
+- **No** -> continue
+- **Yes** -> go to [[Cracking Hashes]]
 
-## **3. Online Tools for Identifying Hashes**
+## 4. hashid.py
 
-[[Useful Websites (Password Cracking)]]
-
-## **4. hashid.py**
-
-Identify the different types of hashes used to encrypt data
+Identify the different types of hashes
 
 `hashid hash_file.txt`
 
@@ -69,5 +50,35 @@ Or, to get the hash format, along with the related `hashcat` mode:
 
 `hashid -m hash_file.txt`
 
+⚠️ `hashid` does pattern matching, not true identification.
 
+- **No** -> continue
+- **Yes** -> go to [[Cracking Hashes]]
 
+## 5. Do you have any evidence of an encryption/decryption path?
+
+Evidence means things like:
+
+- **a possible key**
+- source code showing algorithm/mode
+- app logic mentioning **encryption**
+- JS/config with crypto operation
+- IV/nonce/key material nearby
+- challenge wording strongly indicating encryption
+
+- **Yes** -> go to [[Decrypting Data]]
+- **No** -> continue
+
+## 6. Final routing options...
+
+- Have a likely key, algorithm clue, or crypto implementation clue? -> [[Decrypting Data]]
+- Looks like a hash or hash context? -> [[Cracking Hashes]]
+- Still looks transformed by encoding -> [[Decoding Encoded Data]]
+- Do you have binary data but no key and no hash context, check if data could be serialized blob -> [[Insecure Deserialisation#2. Decode and identify the signature]]
+- No evidence yet -> go back to app context:
+  - source code
+  - JavaScript
+  - config
+  - related requests/responses
+  - nearby parameters
+  - challenge wording / labels

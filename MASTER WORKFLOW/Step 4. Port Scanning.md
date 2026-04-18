@@ -54,9 +54,6 @@ grep "Not shown:" udp_top20.nmap | grep -q "net-unreach" && echo "WARNING: net-u
 
 ## Step 4 — Act on scan results
 
-Run all three checks in order. Do not skip any.
-
----
 ### Check 1 — Probe individually listed filtered TCP ports
 
 ⚠️ This probe covers TCP only. If `udp_top20.gnmap` contains individually listed `filtered` or `closed|filtered` ports, note them but do not probe unless you have a specific reason.
@@ -113,18 +110,17 @@ Move to Check 3.
 ### Check 3 — Confirm open ports exist
 
 ```bash
-grep "Ports:" tcp_full.gnmap udp_top20.gnmap | grep -oP '\d+/open(\|filtered)?/(tcp|udp)' | grep -q . && echo "Open ports found" || echo "No open ports found"
+grep "Ports:" tcp_full.gnmap | grep -oP '\d+/open(\|filtered)?/tcp' | grep -q . && echo "Open TCP ports found" || echo "No open TCP ports found"
 ```
 
-- **Open ports found** → proceed to Step 5
-- **No open ports found** → run targeted high-value scan:
+- **Open TCP ports found** → proceed to Step 5
+- **No open TCP ports found** → run targeted high-value scan:
 
 ```bash
 sudo nmap -sS -p 22,80,443,21,25,3389,8080 -T1 -iL live_hosts.txt -oA tcp_targeted
 ```
 
-- Something found → proceed to Step 5
-- Still nothing → proceed to Step 5 with no open ports and note engagement may be heavily filtered
+- proceed to Step 5
 
 ---
 
@@ -153,7 +149,7 @@ for f in tcp_filtered_probe_*.gnmap; do
     grep "Ports:" "$f" | grep -oP '\d+/(open(\|filtered)?|(closed\|)?filtered)/tcp' >> ports_${ip}.txt
 done
 
-# TCP targeted scan — only exists if Check 3 found no open ports and targeted scan was run
+# TCP targeted scan — only exists if Check 3 found no open TCP ports and targeted scan was run
 if [ -f "tcp_targeted.gnmap" ]; then
     grep "Ports:" tcp_targeted.gnmap | while IFS= read -r line; do
         ip=$(echo "$line" | grep -oP '(?<=Host: )[\d.]+')
@@ -172,19 +168,25 @@ for f in ports_*.txt; do [ -f "$f" ] || continue; grep '/tcp$' "$f" | sort -t'/'
 for f in ports_*.txt; do
     [ -f "$f" ] && echo "=== $f ===" && cat "$f"
 done
+
+# Decision 
+cat ports_*.txt | grep -qP '\d+/(open|open\|filtered)/(tcp|udp)' && echo "Open ports found — proceed to Step 6 Hand off" || echo "No open ports found — go to Escalation"
 ```
 
+- **Open ports found** → proceed to Step 6 — Hand off to service detection
+- **No open ports found** → go to Escalation section. Consult `filtered_majority_<ip>.txt` and `tcp_filtered_probe_<ip>.nmap` to determine which escalation technique to reach for.
 
 ---
 
 
 ## Step 6 — Hand off to service detection
 
-Carry all artefacts forward to [[Step 5. Service & Version Detection]]:
+Carry the below artefacts forward to [[Step 5. Service & Version Detection]]:
 
+- `live_hosts.txt` — one file
 - `ports_<ip>.txt` — one file per live host, all actionable ports in `port/state/protocol` format
 - `filtered_majority_<ip>.txt` — one file per affected host, majority-filtered reason breakdown — only exists if Check 2 found `Ignored State: filtered`
-- `tcp_filtered_probe_<ip>.nmap` — one file per affected host, reason detail for individually listed filtered ports — only exists if Check 1 found filtered ports
+- `tcp_filtered_probe_<ip>.nmap` — one file per affected host, reason detail for individually listed filtered ports — only exists if Check 1 found filtered ports (**This file provides the `reason`, which is not detailed in the `live_hosts.txt` files**)
 
 ⚠️ If Step 5. Service & Version Detection and beyond yield nothing useful — return here and escalate using the Escalation section. Consult `filtered_majority_<ip>.txt` and `tcp_filtered_probe_<ip>.nmap` to determine which escalation technique to reach for.
 
