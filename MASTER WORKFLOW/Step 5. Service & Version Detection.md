@@ -53,6 +53,7 @@ done
 ## Step 2 — Build services artefacts
 
 Reads every line from `ports_<ip>.txt` and writes to `services_<ip>.txt`. 
+
 `-sV` may resolve `open|filtered` to confirmed `open`. If no match is found, the original state is preserved. No port is dropped.
 
 ```bash

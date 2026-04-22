@@ -188,7 +188,7 @@ Carry the below artefacts forward to [[Step 5. Service & Version Detection]]:
 - `filtered_majority_<ip>.txt` — one file per affected host, majority-filtered reason breakdown — only exists if Check 2 found `Ignored State: filtered`
 - `tcp_filtered_probe_<ip>.nmap` — one file per affected host, reason detail for individually listed filtered ports — only exists if Check 1 found filtered ports (**This file provides the `reason`, which is not detailed in the `live_hosts.txt` files**)
 
-⚠️ If Step 5. Service & Version Detection and beyond yield nothing useful — return here and escalate using the Escalation section. Consult `filtered_majority_<ip>.txt` and `tcp_filtered_probe_<ip>.nmap` to determine which escalation technique to reach for.
+⚠️ If [[Step 5. Service & Version Detection]] and beyond yield nothing useful — return here and escalate using the Escalation section. Consult `filtered_majority_<ip>.txt` and `tcp_filtered_probe_<ip>.nmap` to determine which escalation technique to reach for. **Also, you can create `tcp_targeted` from `Step 4/Check 3`, if not already created.**
 
 ---
 
