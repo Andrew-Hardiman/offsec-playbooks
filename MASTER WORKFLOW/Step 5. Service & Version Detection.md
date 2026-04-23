@@ -34,20 +34,6 @@ for f in ports_*.txt; do
 done
 ```
 
-**`-sV` — service and version detection**
-
-- `service` field = port-number name lookup — unverified
-- `version` field = Nmap connected and read the banner — verified
-- Never treat both fields with equal confidence
-
-**`-O` — OS detection**
-
-- Needs at least one open and one closed port for a reliable guess
-- Scepticism rules — apply in order:
-    1. Treat OS guess as a lead, not a confirmed fact
-    2. Kernel version — additional scepticism regardless of target type
-    3. Virtualised target — treat the entire `-O` output with scepticism, not just the kernel version
-
 ---
 
 ## Step 2 — Build services artefacts
@@ -93,13 +79,37 @@ Expected format:
 53/open/udp/-/-
 ```
 
-## Step 3 — Extract OS detection output 
+
+## Step 3 — Resolve version gaps
+
+Read each `services_<ip>.txt`. Ignore rows with `-` in the version field (service not identified, nothing to probe). For each remaining row where the version **number** is missing (product name only, protocol descriptor only), or incomplete (major version only, no minor), run probes by service:
+
+| Service                                   | Probes                                                                                                                                                                                                                                                                       |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `http`, `https`, `http-proxy`, `http-alt` | `curl -sI http://<ip>:<port>` <br><br>then `whatweb -a 3 http://<ip>:<port>` <br><br>If both silent: <br>`nikto -host <ip> -port <port> -Tuning b`                                                                                                                           |
+| `netbios-ssn`, `microsoft-ds`             | `sudo nmap --script smb-os-discovery -p <port> <ip>`. If output contains a `Host script results:` block with a version → update services file. If output shows only the port/state/service line and no script block → leave as gap (nothing found).                          |
+| `ssh`                                     | `nc <ip> 22` <br><br>Banner arrives instantly (format: `SSH-<proto>-<software>`). `Ctrl+C` once you see it — `nc` will hang waiting for `SSH` handshake otherwise. Extract clean software version manually if banner contains junk (e.g. CTF flag that broke nmap's parser). |
+| `ftp`                                     | STUB (YOU NEED TO WRITE THIS)                                                                                                                                                                                                                                                |
+| anything else                             | Leave as-is                                                                                                                                                                                                                                                                  |
+
+Manually edit `services_<ip>.txt` with confirmed versions:
+
+```
+Before: 80/open/tcp/http/lighttpd
+After:  80/open/tcp/http/lighttpd 1.4.55
+```
+
+Unresolved gaps stay as-is and fall through to Step 6.
+
+⚠️ UDP version detection is **not** handled here — Step 1 runs TCP-only. Flagged as a future consideration: if UDP version gaps prove valuable in real engagements, extend Step 1's nmap to include `-sU -sV` or add a UDP-specific version step.
+
+## Step 4 — Extract OS detection output 
 
 ```bash 
 for f in services_*.nmap; do [ -f "$f" ] || continue; ip=$(echo "$f" | grep -oP '\d+\.\d+\.\d+\.\d+'); grep -E "OS details:|Aggressive OS guesses:|Running:|OS CPE:" "$f" > os_${ip}.txt; echo "=== os_${ip}.txt ===" && cat os_${ip}.txt; done
 ```
 
-## Step 4 — Decision
+## Step 5 — Decision
 
 → Services and/or versions detected on any host — proceed to [[Step 6. Vulnerability Analysis]] with the appropriate **Carry-forward artefacts**.
 
