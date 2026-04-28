@@ -51,13 +51,14 @@ for f in ports_*.txt; do
     > "$out"
     while IFS='/' read -r port state proto; do
         if [[ ( "$state" == "open" || "$state" == "open|filtered" ) && "$proto" == "tcp" && -f "$gnmap" ]]; then
-            match=$(grep "Ports:" "$gnmap" | grep -oP "\b${port}/(?:open(?:\|filtered)?)/tcp//[^/]*/[^/]*/[^/]*")
+            match=$(grep "Ports:" "$gnmap" | grep -oP "\b${port}/[^/]+/tcp//[^/]*/[^/]*/[^/]*")
             if [ -n "$match" ]; then
-                resolved_state=$(echo "$match" | cut -d'/' -f2)
+                gnmap_state=$(echo "$match" | cut -d'/' -f2)
                 service=$(echo "$match" | cut -d'/' -f5)
                 version=$(echo "$match" | cut -d'/' -f7)
                 [ -z "$service" ] && service="-"
                 [ -z "$version" ] && version="-"
+                if [[ "$state" == "open|filtered" && "$gnmap_state" == "open" ]]; then resolved_state="open"; else resolved_state="$state"; fi
                 echo "${port}/${resolved_state}/${proto}/${service}/${version}" >> "$out"
             else
                 echo "${port}/${state}/${proto}/-/-" >> "$out"
@@ -82,14 +83,17 @@ Expected format:
 
 ## Step 3 — Resolve version gaps
 
-Read each `services_<ip>.txt`. Ignore rows with `-` in the version field (service not identified, nothing to probe). For each remaining row where the version **number** is missing (product name only, protocol descriptor only), or incomplete (major version only, no minor), run probes by service:
+Read each `services_<ip>.txt`. Ignore rows where **both** service and version are `-` (nmap got nothing — no probe target). 
+
+For each remaining row where the version number is missing (product name only, protocol descriptor only), incomplete (major version only, no minor), or where service is `tcpwrapped` (port alive but actively rebuffed nmap), run probes by service:
 
 | Service                                   | Probes                                                                                                                                                                                                                                                                       |
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `http`, `https`, `http-proxy`, `http-alt` | `curl -sI http://<ip>:<port>` <br><br>then `whatweb -a 3 http://<ip>:<port>` <br><br>If both silent: <br>`nikto -host <ip> -port <port> -Tuning b`                                                                                                                           |
-| `netbios-ssn`, `microsoft-ds`             | `sudo nmap --script smb-os-discovery -p <port> <ip>`. If output contains a `Host script results:` block with a version → update services file. If output shows only the port/state/service line and no script block → leave as gap (nothing found).                          |
+| `netbios-ssn`, `microsoft-ds`             | `sudo nmap --script smb-os-discovery -p <port> <ip>`. <br><br>If output contains a `Host script results:` block with a version → update `services` file. <br><br>If output shows only the port/state/service line and no script block → leave as gap (nothing found).        |
 | `ssh`                                     | `nc <ip> 22` <br><br>Banner arrives instantly (format: `SSH-<proto>-<software>`). `Ctrl+C` once you see it — `nc` will hang waiting for `SSH` handshake otherwise. Extract clean software version manually if banner contains junk (e.g. CTF flag that broke nmap's parser). |
 | `ftp`                                     | STUB (YOU NEED TO WRITE THIS)                                                                                                                                                                                                                                                |
+| `tcpwrapped`                              | `nc -nv <ip> <port>`<br># Ctrl+C after ~5s if silent<br><br>`curl -sI http://<ip>:<port>`<br><br>`curl -skI https://<ip>:<port>`                                                                                                                                             |
 | anything else                             | Leave as-is                                                                                                                                                                                                                                                                  |
 
 Manually edit `services_<ip>.txt` with confirmed versions:
