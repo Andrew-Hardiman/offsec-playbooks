@@ -29,6 +29,12 @@ Unlike the robots.txt file, which restricts what search engine crawlers can look
 
 This file might inadvertently leak sensitive information, or paths to private information.
 
+`https://iprotectu.com/sitemap_index.xml`
+
+AND
+
+`https://iprotectu.com/sitemap.xml`
+
 ## 4. HTTP Headers
 
 When we make requests to the web server, the server returns various HTTP headers. These headers can sometimes contain useful information such as the webserver software and possibly the programming/scripting language in use. In the below example, we can see the webserver is NGINX version 1.18.0 and runs PHP version 7.4.3. Using this information, we could find vulnerable versions of software being used.
