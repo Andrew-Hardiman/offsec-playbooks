@@ -12,11 +12,11 @@ Both accepted. Pick one and stick to it.
 
 ## FTP
 
-`hydra -l <user> -P /usr/share/wordlists/rockyou.txt <ip> <service>`
+`hydra -l <user> -P /usr/share/wordlists/rockyou.txt -s <port> <ip> <service>`
 
 ## SSH
 
-`hydra -l <user> -P /usr/share/wordlists/rockyou.txt -t 4 <ip> <service>`
+`hydra -l <user> -P /usr/share/wordlists/rockyou.txt -s <port> -t 4 <ip> <service>`
 
 SSH default thread count is 4 for a reason — OpenSSH rate-limits and drops parallel auth attempts above that. Do not raise `-t` on SSH.
 

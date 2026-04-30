@@ -197,6 +197,20 @@ Carry the below artefacts forward to [[Step 5. Service & Version Detection]]:
 Do not reach for these during a normal engagement. Return here only when default scans yield nothing useful.
 
 ---
+### Pick the right escalation
+
+Walk in order, stop at first match:
+
+| #   | Symptom                                               | Section                    |
+| --- | ----------------------------------------------------- | -------------------------- |
+| 1   | Default scans heavily filtered, cause unclear         | Firewall rule mapping      |
+| 2   | `-sA` shows unfiltered, `-sS` shows filtered          | --source-port probe        |
+| 3   | Results inconsistent across re-runs                   | Slow timing                |
+| 4   | `-sA` confirms stateless firewall doing SYN-filtering | Stateless firewall evasion |
+| 5   | Attribution risk (real engagement)                    | Stealth options            |
+| 6   | Maximum stealth required                              | Idle/zombie scan           |
+
+---
 ### Firewall rule mapping
 
 Use when default scans return heavily filtered results. Identifies which ports the firewall is not blocking — does not confirm a service is listening.
@@ -211,6 +225,44 @@ sudo nmap -sW -p- -T4 -iL live_hosts.txt -oA window_scan
 - Ports appearing `unfiltered` in `-sA` → firewall not blocking them
 - Same ports appearing `closed` in `-sW` → corroborates firewall not blocking them
 - These scans do not confirm open ports — they confirm which ports the firewall is not blocking. Take note of unblocked ports and probe them directly with `-sS` before feeding through Step 5 - Collate ports.
+
+---
+### --source-port probe
+
+Use when `-sA` shows ports unfiltered but `-sS` shows them filtered — firewall is trusting traffic from specific source ports. Source port and target port are independent — scan all destination ports each time, varying only the claimed source.
+
+```bash
+# Probing all ports, claiming source is DNS
+sudo nmap -sS --source-port 53 -p- -T4 -iL live_hosts.txt -oA srcport_53
+```
+
+```bash
+# Probing all ports, claiming source is HTTP
+sudo nmap -sS --source-port 80 -p- -T4 -iL live_hosts.txt -oA srcport_80
+```
+
+```bash
+# Probing all ports, claiming source is HTTPS
+sudo nmap -sS --source-port 443 -p- -T4 -iL live_hosts.txt -oA srcport_443
+```
+
+- Different results across the three runs → firewall is source-port-trusting. Feed differing results into Step 5 - Collate ports.
+- All three identical to default `-sS` → firewall is not source-port-trusting, move to next escalation.
+
+---
+### Slow timing
+
+Use when results are inconsistent across re-runs (ports flip open/filtered between scans) — defender may be rate-limiting or dropping after probe-rate threshold. Re-run the full TCP scan slower:
+
+```bash
+# Re-scan slower to defeat rate limiting
+sudo nmap -sS -p- -T2 -iL live_hosts.txt -oA tcp_full_T2
+```
+
+⚠️ Use `-T2` first; only escalate to `-T1` if results still inconsistent.
+
+- Results match original `-T4` scan → rate limiting isn't the issue.
+- Results differ → use slower scan's results, feed into Step 5 - Collate ports.
 
 ---
 ### Stateless firewall evasion
@@ -228,27 +280,70 @@ sudo nmap -sX -p- -T4 -iL live_hosts.txt -oA xmas_scan
 ---
 ### Stealth options
 
-Append to any scan command when operating on a real engagement where attribution or detection is a concern:
+Two distinct goals — pick subsections based on which applies.
 
-| Option                               | Purpose                                 | Condition                                             |
-| ------------------------------------ | --------------------------------------- | ----------------------------------------------------- |
-| `-D <IP1>,<IP2>,RND,ME`              | Decoy scan — hides your IP among others | Attribution risk                                      |
-| `-f` / `-ff`                         | Fragment packets into 8/16 byte chunks  | Evading traditional IDS/firewall                      |
-| `--source-port 53`                   | Spoof source port                       | Firewall allows traffic from trusted ports            |
-| `--data-length <num>`                | Pad packets with random data            | Evading IDS signature matching                        |
-| `-e <interface> -Pn -S <SPOOFED_IP>` | Full IP spoofing                        | Only if you can monitor network traffic for responses |
-| `--spoof-mac <MAC>`                  | Spoof MAC address                       | Same subnet only                                      |
+- **Detection avoidance** — defender does not see the scan happening
+- **Attribution avoidance** — defender sees the scan but cannot identify you as the source
 
----
+All commands assume `-T1` (correct default — real-world rate detection mostly fires on fast scans). If `-T1` is detected, the defender may be alerting on slow/long-duration scans instead — try `-T2` or `-T3`. Timing is empirical. Add `-n` to disable reverse DNS lookups — defender's authoritative DNS will not see lookups for their range.
 
+#### Decoy scan (attribution avoidance)
+
+Target sees scans from multiple sources and cannot distinguish the real attacker. Detection still occurs.
+
+```bash
+# Decoys + random fillers + you, scan all ports
+sudo nmap -sS -Pn -D <decoy_ip1>,<decoy_ip2>,RND,RND,ME -p- -T1 -iL live_hosts.txt -oA decoy_scan
+```
+
+⚠️ Decoys must be reachable IPs. `RND` generates random reachable IPs.
+
+#### Spoof MAC address (attribution avoidance)
+
+Same subnet only — MAC addresses do not traverse routers. Use on internal pentests / post-foothold pivots.
+
+```bash
+# Spoof as random MAC
+sudo nmap -sS --spoof-mac 0 -p- -T1 -iL live_hosts.txt -oA spoofmac_scan
+```
+
+`--spoof-mac 0` randomises. Pass a vendor prefix (`Cisco`, `Apple`) or full MAC for specific impersonation.
+
+#### Pad packet data (detection avoidance)
+
+Defeats signature IDS rules matching on packet length.
+
+```bash
+# Append 25 bytes of random data to each probe
+sudo nmap -sS -Pn --data-length 25 -p- -T1 -iL live_hosts.txt -oA padded_scan
+```
+
+#### Fragment packets (detection avoidance)
+
+⚠️ Largely defeated by modern IDS — Snort/Suricata reassemble fragments before matching. Only useful against legacy or misconfigured inspectors.
+
+```bash
+# Fragment into 8-byte chunks
+sudo nmap -sS -Pn -f -p- -T1 -iL live_hosts.txt -oA frag_scan
+```
+
+`-ff` fragments into 16-byte chunks. Some firewalls drop tiny fragments outright.
+
+#### Full IP spoofing (attribution avoidance)
+
+⚠️ Last-resort, rarely practical. Replies go to the spoofed IP, not you — only useful if you are ARP-positioned or on-path to monitor responses.
+
+```bash
+# Spoof source IP, requires response monitoring
+sudo nmap -sS -Pn -e <interface> -Pn -S <spoofed_ip> -p- -T1 <target>
+```
 ### Maximum stealth — idle/zombie scan
 
 Your IP never touches the target. Requires a genuinely idle host with predictable sequential IP ID incrementation. If the zombie is busy — results are useless.
 
 ```bash
-sudo nmap -sI <ZOMBIE_IP> -p- -T4 <target>
+sudo nmap -sI -Pn <zombie_ip> -p- -T1 <target>
 ```
-
 ---
 
 ## Timing reference
