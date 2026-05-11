@@ -1,5 +1,5 @@
 
-## 1. Is this an external engagement or does scope permit OSINT?
+## 1. Is this an external engagement or does the scope permit OSINT?
 
 - **No** (lab / internal / CTF with known scope) → Skip to Step 2
 - **Yes** → Continue below

@@ -360,9 +360,9 @@ Command:
 | 50+          | ✅ _Probably well-patched._ Focus more on misconfigs (e.g. Proceed to next step)                                     |
 #### ✅ Concrete Next Steps:
 
-#### 1. **Exploit Cheat Sheet by Missing Hotfix**
+#### 1. **OS Exploit Index** 
 
-Go to "Exploit Cheat Sheet by Missing Hotfix" folder, and find the note specific to the server name and version you are targeting. 
+Go to `OS Exploit Index/Windows/` and find the note specific to the target's OS version.
 
 ---
 

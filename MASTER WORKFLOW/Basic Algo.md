@@ -9,7 +9,7 @@
 
 ## After foothold
 - Linux target -> go to Linux privilege escalation workflow (TO DO - BUILD/ADD THIS)
-- Windows target -> go to [[PrivEsc (Windows)/Windows Privilege Escalation Checksheet]]
+- Windows target -> go to [[Windows Privilege Escalation Checksheet]]
 
 ## Rules
 - Start here.
