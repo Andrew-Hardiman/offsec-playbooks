@@ -67,7 +67,7 @@ From the engagement working directory:
 
 ### Assemble kernel shellcode
 
-`nasm -f bin eternalblue_kshellcode_x64.asm -o sc_x64_kernel.bin`
+`nasm -f bin shellcode/eternalblue_kshellcode_x64.asm -o sc_x64_kernel.bin`
 
 ### Generate reverse shell payload
 
@@ -105,14 +105,27 @@ Microsoft Windows [Version 6.1.7601]
 C:\Windows\system32>
 ```
 
-Verify context:
+### Verify context
 
-`whoami`
+Primary:
+`set USERPROFILE` (type this do not copy and paste)
 
-Expected: `nt authority\system`.
+Fallback (this command may disconnect shell):
+`cmd.exe /c whoami`
 
 ### Decision
 
-- `nt authority\system` → foothold confirmed. Exit walkthrough → proceed to [[Windows Privilege Escalation Checksheet]].
-- No connection received → exploit failed or target crashed. Verify reachability (`ping <ip>`), re-run preflight Check 1.
-- Connection received but not SYSTEM → flag for investigation. Treat as user-level foothold.
+**Foothold confirmed:**
+
+- `USERPROFILE=C:\Windows\system32\config\systemprofile` (or `whoami` returns `nt authority\system`) → SYSTEM-level foothold (highest privileges) → [[Windows Privilege Escalation Checksheet]].
+- `USERPROFILE=` any other path (or `whoami` returns non-SYSTEM context) → user-level foothold → [[Windows Privilege Escalation Checksheet]].
+
+**Verification didn't complete:**
+
+- Shell dropped during or before verification → `ping <ip>`:
+  - Unreachable → reset target (CTF/lab) or abandon and log (real engagement).
+  - Reachable → re-fire Step 3. Max 3 attempts. After 3 → return to [[Step 6. Vulnerability Analysis]].
+- No connection received → `ping <ip>`:
+  - Unreachable → reset target (CTF/lab) or abandon and log (real engagement).
+  - Reachable + Check 2 defaulted to x64 → target may be x86. Route to [[MS17-010 EternalBlue Windows 7 SP1 x86]].
+  - Reachable + Check 2 confirmed x64 → arch is not the issue. Other blocker (EDR, network filter, listener config). Abandon EternalBlue → return to [[Step 6. Vulnerability Analysis]].

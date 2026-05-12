@@ -1,3 +1,14 @@
+
+### ==0. Already SYSTEM?== 
+
+Primary:
+`set USERPROFILE` (type this do not copy and paste)
+
+Fallback (this command may disconnect shell):
+`cmd.exe /c whoami`
+
+- `USERPROFILE=C:\Windows\system32\config\systemprofile` → SYSTEM-level foothold (highest privileges). Skip Checksheet → exit to post-exploitation phase per engagement objective. - Any other path → continue to Section 1.
+
 ### ==1. Automated Enumeration==
 
 #### **Step 1: Transfer winPEAS to the Target**
