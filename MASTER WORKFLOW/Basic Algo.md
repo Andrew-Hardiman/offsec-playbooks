@@ -10,9 +10,3 @@
 ## After foothold
 - Linux target -> go to Linux privilege escalation workflow (TO DO - BUILD/ADD THIS)
 - Windows target -> go to [[Windows Privilege Escalation Checksheet]]
-
-## Rules
-- Start here.
-- Do not start in a specialist workflow first.
-- Branch only when evidence supports the branch.
-- Record commands, outputs, creds, and decision points as you go.
