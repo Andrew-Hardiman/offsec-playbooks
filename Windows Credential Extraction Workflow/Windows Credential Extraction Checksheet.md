@@ -11,7 +11,7 @@ Fallback (this command may disconnect shell): `cmd.exe /c whoami`
 
 | Need                                       | Min context           | Walkthrough                                 |
 | ------------------------------------------ | --------------------- | ------------------------------------------- |
-| Local user NTLM hashes (offline crack)     | SYSTEM                | [[SAM Hive Dump]]                           |
+| Local user(s) NTLM hashes (offline crack)  | SYSTEM                | [[SAM Hive Dump]]                           |
 | Currently logged-in users' cleartext creds | SYSTEM                | [[LSASS Dump (Mimikatz sekurlsa)]]          |
 | Cached domain creds (mscash)               | SYSTEM                | [[LSA Secrets Dump]]                        |
 | Kerberos tickets                           | SYSTEM                | [[Kerberos Ticket Extraction]]              |
