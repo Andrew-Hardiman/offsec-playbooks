@@ -41,13 +41,14 @@ When prompted for password, hit Enter (blank).
 
 ### /etc/shadow & /etc/passwd:
 
-`ls -l /etc/shadow /etc/passwd`
+`test -r /etc/shadow && echo "SHADOW READABLE" || echo "SHADOW NOT READABLE"`
+`test -w /etc/passwd && echo "PASSWD WRITABLE" || echo "PASSWD NOT WRITABLE"`
+`test -w /etc/shadow && echo "SHADOW WRITABLE" || echo "SHADOW NOT WRITABLE"` 
 
-- `/etc/shadow` includes `r` for `others` (e.g. `-rw-r--r--`) → [[Linux PrivEsc Walkthroughs/Readable Shadow|Readable /etc/shadow]]
-- `/etc/shadow` includes `w` for `others` (e.g. `-rw--w--w-`) → [[Linux PrivEsc Walkthroughs/Writable Shadow|Writable /etc/shadow]]
-- `/etc/passwd` includes `w` for `others` (e.g. `-rw-r--rw-`) → [[Linux PrivEsc Walkthroughs/Writable Passwd|Writable /etc/passwd]]
-- Standard permissions on both → proceed
-
+- `SHADOW READABLE` → [[Linux PrivEsc Walkthroughs/Readable Shadow|Readable /etc/shadow]]
+- `PASSWD WRITABLE` → [[Linux PrivEsc Walkthroughs/Writable Passwd|Writable /etc/passwd]]
+- `SHADOW WRITABLE` → [[Linux PrivEsc Walkthroughs/Writable Shadow|Writable /etc/shadow]]
+- All three `NOT` → proceed
 ### Credentials in files (history, config, SSH keys):
 
 `find / \( -name "id_rsa" -o -name "id_ed25519" -o -name "id_ecdsa" -o -name ".bash_history" -o -name ".mysql_history" \) -readable 2>/dev/null`

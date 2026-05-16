@@ -11,13 +11,12 @@ No external lookup needed — every precondition is checked in Step 1 below.
 
 ## Step 1 — Preflight verification
 
-### Confirm /etc/shadow is readable:
+### Confirm /etc/shadow is readable by current user: 
 
-`ls -l /etc/shadow`
+`test -r /etc/shadow && echo "READABLE" || echo "NOT READABLE"` 
 
-- Permissions include `r` for `others` (e.g. `-rw-r--r--`) → proceed.
-- Default `-rw-r-----` → walkthrough doesn't apply.
-
+- `READABLE` → proceed. 
+- `NOT READABLE` → walkthrough doesn't apply.
 ### Inspect target hash field:
 
 `grep '^root:' /etc/shadow`
