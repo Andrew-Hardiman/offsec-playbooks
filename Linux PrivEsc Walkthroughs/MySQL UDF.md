@@ -234,7 +234,7 @@ MySQL session blocks. Switch to listener terminal: connection received, prompt s
 
 In the listener terminal (now connected to target): 
 
-`script -q /dev/null /bin/bash`
+[[Reverse Shell Stabilization]]
 
 ## Step 5 — Cleanup
 
