@@ -73,7 +73,7 @@ Verify:
 
 Enter the password chosen in Step 3.
 
-- Prompt returns `#`; `whoami` returns `root` → root achieved. Proceed to Step 6.
+- Prompt returns `#`; `id` shows `uid=0(...)` → root achieved. Proceed to Step 6.
 - "Authentication failure" → hash insertion mangled the line, or password mistyped. Re-verify Step 4's grep output character-for-character against the Step 3 openssl output.
 - `su` rejects with "su: must be run from a terminal" → not in a real TTY; see [[Reverse Shell Stabilization]].
 
