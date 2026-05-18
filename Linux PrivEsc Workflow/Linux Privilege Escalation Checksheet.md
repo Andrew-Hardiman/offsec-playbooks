@@ -16,13 +16,13 @@ When prompted for password, hit Enter (blank).
 
 ---
 
-## Step 1 — Sudo & group context
+## Step 1 — Sudo and group privileges
 
 ### Sudo:
 
 `sudo -l`
 
-- NOPASSWD command where the binary is on GTFOBins → [[Sudo Shell Escape]]
+- sudo -l lists a binary for which a GTFOBins entry exists with a `Shell` function AND the Shell function has a populated `Sudo` tab → [[Sudo Shell Escape]]
 - `env_keep` includes `LD_PRELOAD` or `LD_LIBRARY_PATH` AND any NOPASSWD command exists → [[Sudo Environment Variables]]
 - Nothing usable → proceed
 
