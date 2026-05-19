@@ -23,7 +23,7 @@ When prompted for password, hit Enter (blank).
 `sudo -l`
 
 - sudo -l lists a binary for which a GTFOBins entry exists with a `Shell` function AND the Shell function has a populated `Sudo` tab → [[Sudo Shell Escape]]
-- `env_keep` includes `LD_PRELOAD` or `LD_LIBRARY_PATH` AND any NOPASSWD command exists → [[Sudo Environment Variables]]
+- `env_keep` includes `LD_PRELOAD` OR `LD_LIBRARY_PATH` → [[Sudo Environment Variables]]
 - Nothing usable → proceed
 
 ### Groups:
