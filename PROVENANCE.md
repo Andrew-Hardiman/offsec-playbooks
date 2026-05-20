@@ -1,0 +1,3 @@
+Authored by Andrew Hardiman.
+
+All commits are signed; the commit history is the source of truth.
