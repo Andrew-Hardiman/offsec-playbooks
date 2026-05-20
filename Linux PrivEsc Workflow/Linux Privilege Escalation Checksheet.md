@@ -63,12 +63,20 @@ When prompted for password, hit Enter (blank).
 
 ## Step 3 — Cron jobs
 
-`cat /etc/crontab; ls -la /etc/cron.d/ /etc/cron.daily/ /etc/cron.hourly/ /etc/cron.weekly/ /etc/cron.monthly/ 2>/dev/null`
+On **attacker**:
 
-- Cron entry invokes a script the current user can write → [[Cron File Permissions]]
-- Cron entry invokes a command by relative path AND any directory in cron's `$PATH` is writable by the current user → [[Cron PATH]]
-- Cron entry uses `tar`, `rsync`, `chown`, `chmod`, or similar with `*` in a directory the current user controls → [[Cron Wildcards]]
-- Nothing → proceed
+`(echo "bash <<'EOF'"; cat ~/scripts/cron_enum.sh; echo "EOF") | xclip -selection clipboard`
+
+(Wayland: substitute `wl-copy` for `xclip -selection clipboard`.)
+
+Paste into target shell.
+
+Route on output markers:
+
+- `WRITABLE_SCRIPT[root]: <path>` → [[Cron File Permissions]], use `<path>` as `<script>`
+- `RELATIVE_CMD[root]: <cmd>` AND `WRITABLE_PATH_DIR: <dir>` both present → [[Cron PATH]]
+- `WILDCARD[root]: <file>:<line>:<body>` → verify the wildcard's expansion directory is writable by current user; if writable → [[Cron Wildcards]]
+- No markers → no cron PrivEsc route, proceed to Step 4
 
 ---
 
