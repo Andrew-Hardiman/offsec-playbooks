@@ -28,7 +28,7 @@ Otherwise:
 
 `grep -h "$(basename <script>)" /etc/crontab /etc/cron.d/* 2>/dev/null`
 
-**Note field 6 as `<cron_user>`. Note fields 1–5 as `<cron_interval>`**.
+**Note the field directly the command as `<cron_user>`. Note everything preceding `<cron_user>` as `<cron_interval>` — the five time fields, or a single `@`-string (`@hourly`, `@reboot`, …)**.
 
 ##### Confirm `<script>` is a shell script, not a binary: 
 
