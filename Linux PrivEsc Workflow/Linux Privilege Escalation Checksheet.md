@@ -75,7 +75,7 @@ Route on output markers:
 
 - `WRITABLE_SCRIPT[root]: <path>` → [[Cron File Permissions]], use `<path>` as `<script>`
 - `RELATIVE_CMD[root]: <cmd>` AND `WRITABLE_PATH_DIR: <dir>` both present → [[Cron PATH]]
-- `WILDCARD[root]: <file>:<line>:<body>` → verify the wildcard's expansion directory is writable by current user; if writable → [[Cron Wildcards]]
+- `WILDCARD[root]: <dir>:<file>:<line>:<body>` → [[Cron Wildcards]]
 - No markers → no cron PrivEsc route, proceed to Step 4
 
 ---
