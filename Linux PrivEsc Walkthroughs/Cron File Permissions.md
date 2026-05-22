@@ -130,3 +130,7 @@ Root shell achieved. Next steps are goal-dependent; common destinations:
 - Credential extraction (additional users' hashes, SSH keys, app secrets) → [[Linux Credential Extraction Checksheet]]
 - Persistence (SSH key, cron, systemd) → [[Linux Persistence Checksheet]]
 - Lateral movement → [[Linux Lateral Movement Checksheet]]
+
+## Validation
+
+THM:Linux PrivEsc:Task 8 Cron Jobs - File Permissions
