@@ -122,18 +122,20 @@ Route on output markers:
 
 ## Step 8 — SUID / SGID binaries
 
-High IOC. Full filesystem traversal.
+⚠️ High IOC. Full filesystem traversal — run once; the technique walkthroughs reuse this output, they do not re-run the `find`.
 
-`find / -perm -u=s -o -perm -g=s -type f 2>/dev/null`
+`find / -type f \( -perm -4000 -o -perm -2000 \) -exec ls -l {} + 2>/dev/null`
 
-For each non-default SUID binary, triage:
+(No output → proceed to Step 9)
 
-- Binary on GTFOBins SUID list → [[SUID Known Exploits]]
-- Binary loads `.so` files via configurable path (verify with `ltrace <binary>` or `strace -e openat <binary>`) → [[SUID Shared Object Injection]]
-- Binary respects `PATH` / `IFS` / `LD_*` environment variables → [[SUID Environment Variables]]
-- Binary invokes a shell via `system()` / `popen()` (check with `strings <binary> | grep -E '/sh|/bash'`) → [[SUID Shell Features]]
-- Custom binary not matching any pattern → manual analysis
-- Nothing exploitable → proceed
+Try the technique walkthroughs in stealth-first order. Each receives this list (the output from the above command), self-selects the binaries it applies to, loops them, and returns here on exhaustion to try the next:
+
+1. [[SUID Known Exploits]]
+2. Loads `.so` files via configurable path (verify with `ltrace <binary>` or `strace -e openat <binary>`) → [[SUID Shared Object Injection]]
+3. Respects `PATH` / `IFS` / `LD_*` environment variables → [[SUID Environment Variables]]
+4. Invokes a shell via `system()` / `popen()` (check with `strings <binary> | grep -E '/sh|/bash'`) → [[SUID Shell Features]]
+
+All four exhausted with no elevation → proceed to Step 9.
 
 ---
 
