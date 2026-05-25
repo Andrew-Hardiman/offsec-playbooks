@@ -128,7 +128,7 @@ Route on output markers:
 
 (No output → proceed to Step 9)
 
-Try the technique walkthroughs in stealth-first order. Each receives this list (the output from the above command), self-selects the binaries it applies to, loops them, and returns here on exhaustion to try the next:
+Try the below technique walkthroughs in stealth-first order. Each receives this list (the output from the above command), self-selects the binaries it applies to, loops them, and returns here on exhaustion to try the next:
 
 1. [[SUID Known Exploits]]
 2. Loads `.so` files via configurable path (verify with `ltrace <binary>` or `strace -e openat <binary>`) → [[SUID Shared Object Injection]]
