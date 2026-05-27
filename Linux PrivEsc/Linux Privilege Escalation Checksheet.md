@@ -131,7 +131,7 @@ Route on output markers:
 Try the below technique walkthroughs in stealth-first order. Each receives this list (the output from the above command), self-selects the binaries it applies to, loops them, and returns here on exhaustion to try the next:
 
 1. [[SUID Known Exploits]]
-2. Loads `.so` files via configurable path (verify with `ltrace <binary>` or `strace -e openat <binary>`) → [[SUID Shared Object Injection]]
+2. [[SUID Shared Object Injection]]
 3. Respects `PATH` / `IFS` / `LD_*` environment variables → [[SUID Environment Variables]]
 4. Invokes a shell via `system()` / `popen()` (check with `strings <binary> | grep -E '/sh|/bash'`) → [[SUID Shell Features]]
 
