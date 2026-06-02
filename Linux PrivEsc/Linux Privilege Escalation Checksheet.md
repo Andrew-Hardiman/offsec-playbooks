@@ -132,7 +132,7 @@ Try the below technique walkthroughs in stealth-first order. Each receives this 
 
 1. [[SUID Known Exploits]]
 2. [[SUID Shared Object Injection]]
-3. Respects `PATH` / `IFS` / `LD_*` environment variables → [[SUID Environment Variables]]
+3. [[SUID Environment Variables]]
 4. Invokes a shell via `system()` / `popen()` (check with `strings <binary> | grep -E '/sh|/bash'`) → [[SUID Shell Features]]
 
 All four exhausted with no elevation → proceed to Step 9.
