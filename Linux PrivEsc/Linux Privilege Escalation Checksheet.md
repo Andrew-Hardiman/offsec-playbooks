@@ -134,8 +134,9 @@ Try the below technique walkthroughs in stealth-first order. Each receives this 
 2. [[SUID Shared Object Injection]]
 3. [[SUID Environment Variables]]
 4. [[SUID Function Export Hijack]]
+5. [[SUID PS4 Debug Trace]]
 
-All four exhausted with no elevation → proceed to Step 9.
+All five exhausted with no elevation → proceed to Step 9.
 
 ---
 
