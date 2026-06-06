@@ -11,7 +11,7 @@
 
 ## Step 1 — Preflight
 
-⚠️ `<script>` is the path from `WRITABLE_SCRIPT[root]: <path>` in [[Linux Privilege Escalation Checksheet]] Step 3. If unknown, return there first.
+⚠️ `<script>` is the path from `WRITABLE_SCRIPT[root]: <path>` in [[Linux Privilege Escalation Checksheet]] Step 4. If unknown, return there first.
 
 ##### Confirm writability of `<script>` — the absolute path to the cron-invoked script:
 

@@ -12,7 +12,7 @@
 
 ## Step 1 — Preflight
 
-⚠️ `<cmd>` is the value from `RELATIVE_CMD[root]: <cmd>` and `<dir>` is the value from `WRITABLE_PATH_DIR: <dir>` in [[Linux Privilege Escalation Checksheet]] Step 3. If unknown, return there first.
+⚠️ `<cmd>` is the value from `RELATIVE_CMD[root]: <cmd>` and `<dir>` is the value from `WRITABLE_PATH_DIR: <dir>` in [[Linux Privilege Escalation Checksheet]] Step 4. If unknown, return there first.
 ##### Confirm the cron entry invokes `<cmd>` as a bare name (no slash), and identify `<cron_user>` and `<cron_interval>`: 
 
 `grep -h "<cmd>" /etc/crontab /etc/cron.d/* 2>/dev/null` 

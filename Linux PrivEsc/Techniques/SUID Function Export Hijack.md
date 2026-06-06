@@ -31,7 +31,7 @@
 
 ## Step 2 — Self-select a candidate
 
-⚠️ Candidate list = the SUID/SGID `find` output from [[Linux Privilege Escalation Checksheet]] Step 8. If absent, return there first.
+⚠️ Candidate list = the SUID/SGID `find` output from [[Linux Privilege Escalation Checksheet]] Step 9. If absent, return there first.
 
 ⚠️ **exec-family** below = `execve` / `execl` / `execv` / `execlp` / `execvp`.
 

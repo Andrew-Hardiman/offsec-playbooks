@@ -49,19 +49,22 @@ When prompted for password, hit Enter (blank).
 - `PASSWD WRITABLE` → [[Linux PrivEsc Walkthroughs/Writable Passwd|Writable /etc/passwd]]
 - `SHADOW WRITABLE` → [[Linux PrivEsc Walkthroughs/Writable Shadow|Writable /etc/shadow]]
 - All three `NOT` → proceed
-### Credentials in files (history, config, SSH keys):
-
-`find / \( -name "id_rsa" -o -name "id_ed25519" -o -name "id_ecdsa" -o -name ".bash_history" -o -name ".mysql_history" \) -readable 2>/dev/null`
-
-`find /etc /opt /var/www /home -type f \( -name "*.conf" -o -name "*.ini" -o -name "*.yml" -o -name "*.env" \) -readable 2>/dev/null | head -50`
-
-- Readable private key belonging to another user → [[Credential File Hunt]]
-- Readable history or config containing credentials → [[Credential File Hunt]]
-- Nothing → proceed
 
 ---
 
-## Step 3 — Cron jobs
+## Step 3 — Credential Harvesting
+
+Read-only filesystem enum for credential-bearing artefacts. Stealth-positive — bash history of read commands is the only IOC.
+
+1. [[History Files]]
+2. [[Config Files]]
+3. [[SSH Keys]]
+
+All three exhausted with no elevation → proceed to Step 4.
+
+---
+
+## Step 4 — Cron jobs
 
 On **attacker**:
 
@@ -76,11 +79,11 @@ Route on output markers:
 - `WRITABLE_SCRIPT[root]: <path>` → [[Cron File Permissions]], use `<path>` as `<script>`
 - `RELATIVE_CMD[root]: <cmd>` AND `WRITABLE_PATH_DIR: <dir>` both present → [[Cron PATH]]
 - `WILDCARD[root]: <dir>:<file>:<line>:<body>` → [[Cron Wildcards]]
-- No markers → no cron PrivEsc route, proceed to Step 4
+- No markers → no cron PrivEsc route, proceed to Step 5
 
 ---
 
-## Step 4 — Root-owned services
+## Step 5 — Root-owned services
 
 `ps -ef | awk '$1=="root"'`
 
@@ -91,7 +94,7 @@ Route on output markers:
 
 ---
 
-## Step 5 — NFS & mounts
+## Step 6 — NFS & mounts
 
 `cat /etc/exports 2>/dev/null; cat /etc/fstab; mount`
 
@@ -100,7 +103,7 @@ Route on output markers:
 
 ---
 
-## Step 6 — PATH abuse
+## Step 7 — PATH abuse
 
 `echo $PATH; for d in $(echo $PATH | tr ':' ' '); do test -w "$d" && echo "WRITABLE: $d"; done`
 
@@ -109,7 +112,7 @@ Route on output markers:
 
 ---
 
-## Step 7 — Capabilities
+## Step 8 — Capabilities
 
 `getcap -r / 2>/dev/null`
 
@@ -120,13 +123,13 @@ Route on output markers:
 
 ---
 
-## Step 8 — SUID / SGID binaries
+## Step 9 — SUID / SGID binaries
 
 ⚠️ High IOC. Full filesystem traversal — run once; the technique walkthroughs reuse this output, they do not re-run the `find`.
 
 `find / -type f \( -perm -4000 -o -perm -2000 \) -exec ls -l {} + 2>/dev/null`
 
-(No output → proceed to Step 9)
+(No output → proceed to Step 10)
 
 Try the below technique walkthroughs in stealth-first order. Each receives this list (the output from the above command), self-selects the binaries it applies to, loops them, and returns here on exhaustion to try the next:
 
@@ -136,13 +139,13 @@ Try the below technique walkthroughs in stealth-first order. Each receives this 
 4. [[SUID Function Export Hijack]]
 5. [[SUID PS4 Debug Trace]]
 
-All five exhausted with no elevation → proceed to Step 9.
+All five exhausted with no elevation → proceed to Step 10.
 
 ---
 
-## Step 9 — Kernel exploits
+## Step 10 — Kernel exploits
 
-⚠️ Kernel exploits risk kernel panics — box may need reset. Run only after Steps 0–8 fall through.
+⚠️ Kernel exploits risk kernel panics — box may need reset. Run only after Steps 0–9 fall through.
 
 `uname -a; cat /etc/os-release 2>/dev/null`
 
@@ -152,7 +155,7 @@ All five exhausted with no elevation → proceed to Step 9.
 
 ---
 
-## Step 10 — Automated enumeration (linpeas)
+## Step 11 — Automated enumeration (linpeas)
 
 Maximum IOC. Comprehensive backstop.
 
@@ -182,7 +185,7 @@ Focus on red+yellow flagged findings. Route each finding back to the appropriate
 
 ## Exhaustion
 
-All ten steps fall through:
+All eleven steps fall through:
 
 1. Re-review `linpeas.out` for less-common findings (kernel keyring, polkit, dbus, custom services).
 2. Deeper enum on app-specific artefacts: `/var/spool/`, `/var/backups/`, `/opt/`, `/srv/`.

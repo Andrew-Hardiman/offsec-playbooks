@@ -13,7 +13,7 @@
 
 ## Step 1 — Preflight
 
-⚠️ `<dir>`, `<file>`, `<line>`, `<body>` are from `WILDCARD[root]: <dir>:<file>:<line>:<body>` in [[Linux Privilege Escalation Checksheet]] Step 3. If unknown, return there first.
+⚠️ `<dir>`, `<file>`, `<line>`, `<body>` are from `WILDCARD[root]: <dir>:<file>:<line>:<body>` in [[Linux Privilege Escalation Checksheet]] Step 4. If unknown, return there first.
 
 ##### Confirm `<body>` is a real command invocation, not a string or comment:
 
