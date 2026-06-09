@@ -23,7 +23,7 @@ Unable to negotiate with {10.10.138.125 port 22}: no matching host key type foun
 
 ## Solution
 
-Add the following to your SCP command:
+Add the following to your command:
 
 `-o HostKeyAlgorithms=+ssh-rsa`
 
