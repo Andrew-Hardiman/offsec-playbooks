@@ -59,8 +59,9 @@ Read-only filesystem enum for credential-bearing artefacts. Stealth-positive —
 1. [[History Files]]
 2. [[Config Files]]
 3. [[SSH Keys]]
+4. Process Command-Line Args — *stub; skip. Build canonically when first encountered in the wild.* 
 
-All three exhausted with no elevation → proceed to Step 4.
+All four exhausted with no elevation → proceed to Step 4.
 
 ---
 
@@ -94,12 +95,12 @@ Route on output markers:
 
 ---
 
-## Step 6 — NFS & mounts
+## Step 6 — NFS exports
 
-`cat /etc/exports 2>/dev/null; cat /etc/fstab; mount`
+`cat /etc/exports 2>/dev/null`
 
-- `/etc/exports` shows an export with `no_root_squash` → [[NFS no_root_squash Escape]]
-- Nothing → proceed
+- Shows an export with `no_root_squash` → [[NFS no_root_squash]]
+- Empty / no `no_root_squash` line → move on to the next step.
 
 ---
 
