@@ -90,7 +90,6 @@ Route on output markers:
 
 - `mysqld` running as root → [[MySQL UDF]]
 - `postgres` running as root → [[Postgres UDF]]
-- Other root-owned service with known CVE → check `OS Exploit Index/Linux/` and searchsploit
 - Nothing → proceed
 
 ---
@@ -148,11 +147,16 @@ All five exhausted with no elevation → proceed to Step 10.
 
 ⚠️ Kernel exploits risk kernel panics — box may need reset. Run only after Steps 0–9 fall through.
 
-`uname -a; cat /etc/os-release 2>/dev/null`
+`uname -r`
 
-- Distribution + kernel match in `OS Exploit Index/Linux/` → run matched walkthrough
-- No match → `searchsploit linux kernel <version>` for manual triage
-- Patched / no exploit / unwilling to risk crash → proceed
+Record as `<kernel_version>` (e.g. `2.6.32-5-amd64`).
+
+`for f in /etc/os-release /etc/debian_version /etc/redhat-release /etc/lsb-release /etc/issue; do echo "--- $f ---"; cat "$f" 2>/dev/null || echo "(absent)"; done`
+
+From the populated files, identify and record `<distro>` (e.g. Debian, Ubuntu, RHEL, CentOS) and `<major_version>` (e.g. 6, 16, 7).
+
+- Check in vault for `OS Exploit Index/Linux/<Distro> <Major version>.md`. If matching file, does the file's Applicable exploits table have a row matching `<kernel_version>` in the Build column → if yes, run that row's Walkthrough
+- Otherwise → proceed
 
 ---
 

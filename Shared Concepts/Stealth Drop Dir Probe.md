@@ -18,6 +18,8 @@ The technique playbook dictates which mount-flag check applies (playbooks are ma
 
 ##### Form A — write + exec only:
 
+On attacker's box:
+
 `(echo "bash -s <<'EOF'"; sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' ~/scripts/drop_dir_probe.sh; echo "EOF") | xclip -selection clipboard`
 
 (Wayland: substitute `wl-copy` for `xclip -selection clipboard`.)
@@ -35,5 +37,5 @@ Paste into target shell.
 
 ## Step 3 — Interpret output
 
-- `DROP OK: /path/to/dir` → `<drop_dir>` = `/path/to/dir`. Return to technique playbook; substitute for the default `/tmp`.
+- `DROP OK: /path/to/dir` → `<drop_dir>` = `/path/to/dir`. Return to technique playbook with `<drop_dir>`; substitute for the default `/tmp`.
 - No output → no candidate passed required checks. Return to technique playbook; use default `/tmp` (accept high IOC) or abandon if engagement stealth is absolute.
