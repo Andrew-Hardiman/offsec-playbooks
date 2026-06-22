@@ -12,13 +12,20 @@
 
 ## Step 1 — Preflight
 
-⚠️ `<cmd>` is the value from `RELATIVE_CMD[root]: <cmd>` and `<dir>` is the value from `WRITABLE_PATH_DIR: <dir>` in [[Linux Privilege Escalation Checksheet]] Step 4. If unknown, return there first.
+⚠️ `<cmd>` is the value from `RELATIVE_CMD[root,cron]: <cmd>` and `<dir>` is the value from `WRITABLE_PATH_DIR[cron]: <dir>` in [[Linux Privilege Escalation Checksheet]] `Scheduled execution`. If unknown, return there first.
 ##### Confirm the cron entry invokes `<cmd>` as a bare name (no slash), and identify `<cron_user>` and `<cron_interval>`: 
 
-`grep -h "<cmd>" /etc/crontab /etc/cron.d/* 2>/dev/null` 
+`grep -H "<cmd>" /etc/crontab /etc/cron.d/* /var/spool/cron/crontabs/* 2>/dev/null` 
 
-- If the command field is `<cmd>` with no slash (e.g. `overwrite.sh`) → PATH search applies and is hijackable. **Note** the field directly before `<cmd>` as `<cron_user>`, and everything preceding `<cron_user>` as `<cron_interval>` — the five time fields, or a single `@`-string (`@hourly`, `@reboot`, …). Proceed.
-- Command field contains a slash — absolute (`/usr/local/bin/<cmd>`) or relative (`./<cmd>`, `sub/<cmd>`) → no PATH search; not PATH-hijackable. Wrong walkthrough; return to Checksheet.
+- If the command field is `<cmd>` with no slash (e.g. `overwrite.sh`) → PATH search applies and is hijackable. Proceed (identify `<cron_user>` / `<cron_interval>` below).
+- Command field contains a slash — absolute (`/usr/local/bin/<cmd>`) or relative (`./<cmd>`, `sub/<cmd>`) → no PATH search; not PATH-hijackable. Wrong walkthrough; return to [[Linux Privilege Escalation Checksheet]].
+
+**Source of the matched line determines `<cron_user>`:**
+- `/etc/crontab` or `/etc/cron.d/<file>` → `<cron_user>` is the field directly before `<cmd>` (6-field format with user).
+- `/var/spool/cron/crontabs/<name>` → `<cron_user>` is `<name>` from the filename (5-field format, no user field in the entry).
+
+**`<cron_interval>` is everything preceding `<cmd>`**: 
+- the five time fields, or a single `@`-string (`@hourly`, `@reboot`, …).
 ##### Confirm writability of `<dir>` — the writable directory in cron's PATH:
 
 `test -w <dir> && echo "WRITABLE" || echo "NOT WRITABLE"`
@@ -40,8 +47,8 @@
 Walks `<cron_path>` left-to-right and stops at whichever comes first: `<dir>`, or a directory holding an executable `<cmd>`.
 
 - `WIN` → `<dir>` is reached before any executable `<cmd>`; the plant resolves first → proceed.
-- `LOSE:<resolve_dir>` → cron resolves an executable `<cmd>` at `<resolve_dir>` before reaching `<dir>`; the plant never fires. Try the next `WRITABLE_PATH_DIR` (`<dir>`) marker; if none precedes `<resolve_dir>`, Cron PATH is not applicable on this box.
-- `DIR_NOT_IN_PATH` → `<dir>` is not in `<cron_path>`; the plant is never searched. (`<dir>` is a `WRITABLE_PATH_DIR` from Checksheet Step 3, so expect this only on a PATH mismatch — **recheck** `<cron_path>` first. Still fails, try the next `WRITABLE_PATH_DIR` (`<dir>`) marker; if none, Cron PATH not applicable).
+- `LOSE:<resolve_dir>` → cron resolves an executable `<cmd>` at `<resolve_dir>` before reaching `<dir>`; the plant never fires. Try the next `WRITABLE_PATH_DIR[cron]` (`<dir>`) marker; if none precedes `<resolve_dir>`, Cron PATH is not applicable on this box.
+- `DIR_NOT_IN_PATH` → `<dir>` is not in `<cron_path>`; the plant is never searched. (`<dir>` is a `WRITABLE_PATH_DIR[cron]` from Checksheet `Scheduled execution`, so expect this only on a PATH mismatch — **recheck** `<cron_path>` first. Still fails, try the next `WRITABLE_PATH_DIR[cron]` (`<dir>`) marker; if none, Cron PATH not applicable).
 ##### Confirm UID 0 for `<cron_user>`:
 
 `awk -F: -v u="<cron_user>" '$1 == u && $3 == 0' /etc/passwd`

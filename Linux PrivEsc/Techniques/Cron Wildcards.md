@@ -13,7 +13,7 @@
 
 ## Step 1 — Preflight
 
-⚠️ `<dir>`, `<file>`, `<line>`, `<body>` are from `WILDCARD[root]: <dir>:<file>:<line>:<body>` in [[Linux Privilege Escalation Checksheet]] Step 4. If unknown, return there first.
+⚠️ `<dir>`, `<file>`, `<line>`, `<body>` are from `WILDCARD[root,cron]: <dir>:<file>:<line>:<body>` in [[Linux Privilege Escalation Checksheet]] `Scheduled execution`. If unknown, return there first.
 
 ##### Confirm `<body>` is a real command invocation, not a string or comment:
 
@@ -51,13 +51,19 @@ Read `<body>`.
 
 ##### Identify `<cron_interval>` and `<cron_user>`:
 
-- `<file>` is `/etc/crontab` or a `/etc/cron.d/` file → `<cron_user>` and `<cron_interval>` are in `<body>`.
-- `<file>` is under `/etc/cron.{hourly,daily,weekly,monthly}/` → `<cron_user>` is `root`, and `<cron_interval>` is named by the directory — `cron.hourly` → hourly, `cron.daily` → daily, `cron.weekly` → weekly, `cron.monthly` → monthly, etc.
+- `<file>` is `/etc/crontab` or a `/etc/cron.d/<file>` → `<cron_user>` is the field directly before the command in `<body>` (6-field with user). `<cron_interval>` is everything preceding `<cron_user>` — the five time fields, or a single `@`-string.
+- `<file>` is under `/etc/cron.{hourly,daily,weekly,monthly}/` → `<cron_user>` is `root`, and `<cron_interval>` is named by the directory — `cron.hourly` → hourly, `cron.daily` → daily, `cron.weekly` → weekly, `cron.monthly` → monthly.
+- `<file>` is `/var/spool/cron/crontabs/<name>` → `<cron_user>` is `<name>` from the filename (5-field, no user in the entry). `<cron_interval>` is everything preceding the command in `<body>` — the five time fields, or a single `@`-string.
 - `<file>` is any other script → grep the cron line that calls it:
 
-`grep -h "$(basename <file>)" /etc/crontab /etc/cron.d/* 2>/dev/null`
+`grep -H "$(basename <file>)" /etc/crontab /etc/cron.d/* /var/spool/cron/crontabs/* 2>/dev/null`
 
-`<cron_user>` is the field before the command; `<cron_interval>` is everything before `<cron_user>` (five time fields, or one `@`-string).
+**Source of the matched line determines `<cron_user>`:**
+- `/etc/crontab` or `/etc/cron.d/<file>` → `<cron_user>` is the field directly before the command (6-field format with user).
+- `/var/spool/cron/crontabs/<name>` → `<cron_user>` is `<name>` from the filename (5-field format, no user field in the entry).
+
+**`<cron_interval>` is everything preceding the command:**  
+- the five time fields, or a single `@`-string (`@hourly`, `@reboot`, …).
 
 ##### Confirm UID 0 for `<cron_user>`:
 

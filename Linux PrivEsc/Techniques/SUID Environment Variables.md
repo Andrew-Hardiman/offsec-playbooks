@@ -7,7 +7,7 @@
 
 ## Step 1 — Self-select a candidate
 
-⚠️ Candidate list = the SUID/SGID `find` output from [[Linux Privilege Escalation Checksheet]] Step 9. If absent, return there first.
+⚠️ Candidate list = the SUID/SGID `find` output from [[Linux Privilege Escalation Checksheet]] `SUID / SGID binaries`. If absent, return there first.
 
 For each candidate `<binary>`, reveal any helper command it invokes:
 
@@ -20,7 +20,7 @@ Each hit shows an invoked command; `<cmd>` = the first whitespace-delimited toke
 - `<cmd>` has **no leading `/`** (e.g. `service`) → PATH-hijackable → **record `<cmd>`** → Step 2.
 - `<cmd>` is an **absolute path** (e.g. `/usr/sbin/service`) → not PATH-hijackable by this technique  → next candidate. 
 
-List exhausted → return to [[Linux Privilege Escalation Checksheet]] Step 9. 
+List exhausted → return to [[Linux Privilege Escalation Checksheet]] `SUID / SGID binaries`. 
 
 ---
 
@@ -32,7 +32,7 @@ Find a writable + executable directory (`<hijack_dir>`). Probe `/tmp` first:
 
 - `EXEC OK` → `<hijack_dir>` is the probed directory.
 - No output → set `d=/dev/shm`, then `d=/var/tmp`, then `d="$HOME"` and re-run (**one at a time**); first that prints `EXEC OK` is `<hijack_dir>`.
-- None → return to [[Linux Privilege Escalation Checksheet]] Step 9.
+- None → return to [[Linux Privilege Escalation Checksheet]] `SUID / SGID binaries`.
 
 Write the payload as `<cmd>` in `<hijack_dir>` and mark it executable:
 

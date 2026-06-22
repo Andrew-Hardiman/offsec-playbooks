@@ -11,7 +11,7 @@
 
 ## Step 1 — Preflight
 
-⚠️ `<script>` is the path from `WRITABLE_SCRIPT[root]: <path>` in [[Linux Privilege Escalation Checksheet]] Step 4. If unknown, return there first.
+⚠️ `<script>` is the path from `WRITABLE_SCRIPT[root,cron]: <path>` in [[Linux Privilege Escalation Checksheet]] `Scheduled execution`. If unknown, return there first.
 
 ##### Confirm writability of `<script>` — the absolute path to the cron-invoked script:
 
@@ -26,9 +26,14 @@ If `<script>` is in `/etc/cron.daily/`, `/etc/cron.hourly/`, `/etc/cron.weekly/`
 
 Otherwise:
 
-`grep -h "$(basename <script>)" /etc/crontab /etc/cron.d/* 2>/dev/null`
+`grep -H "$(basename <script>)" /etc/crontab /etc/cron.d/* /var/spool/cron/crontabs/* 2>/dev/null`
 
-**Note the field directly before the command as `<cron_user>`. Note everything preceding `<cron_user>` as `<cron_interval>` — the five time fields, or a single `@`-string (`@hourly`, `@reboot`, …)**.
+**Source of the matched line determines `<cron_user>`:**
+- `/etc/crontab` or `/etc/cron.d/<file>` → `<cron_user>` is the field directly before the command (6-field format with user).
+- `/var/spool/cron/crontabs/<name>` → `<cron_user>` is `<name>` from the filename (5-field format, no user field in the entry).
+
+**`<cron_interval>` is everything preceding the command:**  
+- the five time fields, or a single `@`-string (`@hourly`, `@reboot`, …).
 
 ##### Confirm `<script>` is a shell script, not a binary: 
 

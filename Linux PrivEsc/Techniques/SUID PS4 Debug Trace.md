@@ -15,7 +15,7 @@
 `env PS4='MARKER' bash -c 'echo "[$PS4]"'`
 
 - `[MARKER]` → `<ps4_ok>` = yes (bash inherits `PS4`; vulnerable) → Proceed.
-- `[+ ]` → `<ps4_ok>` = no (bash sanitizes `PS4` at startup; patched). Technique inapplicable → return to [[Linux Privilege Escalation Checksheet]] Step 9.
+- `[+ ]` → `<ps4_ok>` = no (bash sanitizes `PS4` at startup; patched). Technique inapplicable → return to [[Linux Privilege Escalation Checksheet]] `SUID / SGID binaries`.
 
 ##### Drop dir probe:
 
@@ -23,7 +23,7 @@
 
 - `EXEC OK` → `<drop_dir>` is the probed directory.
 - No output → set `d=/dev/shm`, then `d=/var/tmp`, then `d="$HOME"` and re-run (**one at a time**); first that prints `EXEC OK` is `<drop_dir>`.
-- None → no drop site → return to [[Linux Privilege Escalation Checksheet]] Step 9.
+- None → no drop site → return to [[Linux Privilege Escalation Checksheet]] `SUID / SGID binaries`.
 
 ⚠️ Default `<drop_dir>` is `/tmp` — high IOC. This playbook requires a **setuid-honoring** drop dir. For stealth-required engagements, run [[Stealth Drop Dir Probe]] (with `suid` mode) before this playbook to identify a quieter alternative. Return here with `<drop-dir>`. 
 
@@ -31,7 +31,7 @@
 
 ## Step 2 — Self-select a candidate
 
-⚠️ Candidate list = the SUID/SGID `find` output from [[Linux Privilege Escalation Checksheet]] Step 9. If absent, return there first.
+⚠️ Candidate list = the SUID/SGID `find` output from [[Linux Privilege Escalation Checksheet]] `SUID / SGID binaries`. If absent, return there first.
 
 ⚠️ **exec-family** below = `execve` / `execl` / `execv` / `execlp` / `execvp`.
 

@@ -9,7 +9,7 @@
 
 ## Step 1 — Self-select a candidate
 
-⚠️ Candidate list = the SUID/SGID `find` output from [[Linux Privilege Escalation Checksheet]] Step 9. If absent, return there first.
+⚠️ Candidate list = the SUID/SGID `find` output from [[Linux Privilege Escalation Checksheet]] `SUID / SGID binaries`. If absent, return there first.
 
 For each candidate `<binary>`, trace the `.so` files it loads at runtime:
 
@@ -28,7 +28,7 @@ Each returned line is a `.so` the binary opened (or tried to); `<so_path>` = the
 * Line ends in a number AND `<so_path>` under `/lib`, `/usr/lib`, `/lib64`, `/usr/lib64` → standard library load, ignore this line.
 
 No line on this binary yields a candidate → next candidate.
-List exhausted → return to [[Linux Privilege Escalation Checksheet]] Step 9 (next technique: [[SUID Environment Variables]]).
+List exhausted → return to [[Linux Privilege Escalation Checksheet]] `SUID / SGID binaries` (next technique: [[SUID Environment Variables]]).
 
 ### No `strace` → static fallback
 
@@ -57,7 +57,7 @@ Prints one full `<so_path>` per line. For each `<so_path>` not under `/lib`, `/u
    * `NOT WRITABLE` → proceed.
 
 No `<so_path>` from either tool is writable → next candidate.
-List exhausted → return to [[Linux Privilege Escalation Checksheet]] Step 9 (next technique: [[SUID Environment Variables]]).
+List exhausted → return to [[Linux Privilege Escalation Checksheet]] `SUID / SGID binaries` (next technique: [[SUID Environment Variables]]).
 
 ---
 
