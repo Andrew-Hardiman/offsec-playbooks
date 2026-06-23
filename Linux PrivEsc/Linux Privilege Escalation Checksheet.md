@@ -30,14 +30,39 @@ When prompted for password, hit Enter (blank).
 
 `id`
 
-- `docker` in groups → [[Docker Group Escape]]
-- `lxd` or `lxc` in groups → [[LXD Group Escape]]
+- `docker` in groups → [[Docker Socket Abuse]]
+- `lxd` or `lxc` in groups → [[LXD Socket Abuse]]
 - `disk` in groups → [[Disk Group Escape]]
 - None → proceed
 
 ---
 
-## Step 2 — Sensitive file permissions
+## Step 2 — Container attack surface
+
+### In-container detection:
+
+`cat /proc/1/cgroup 2>/dev/null | grep -E 'docker|lxc|kubepods' && echo "IN_CONTAINER" || (test -f /.dockerenv && echo "IN_CONTAINER" || echo "NOT_IN_CONTAINER")`
+
+- `IN_CONTAINER` → [[Container Escape to Host Root]]
+- `NOT_IN_CONTAINER` → proceed
+
+### Docker socket:
+
+`test -w /var/run/docker.sock && echo "DOCKER_SOCK_WRITABLE"`
+
+- `DOCKER_SOCK_WRITABLE` → [[Docker Socket Abuse]]
+- No output → proceed
+
+### LXD socket:
+
+`for s in /var/lib/lxd/unix.socket /var/snap/lxd/common/lxd/unix.socket; do test -w "$s" && echo "LXD_SOCK_WRITABLE: $s"; done`
+
+- `LXD_SOCK_WRITABLE: <path>` → [[LXD Socket Abuse]]
+- No output → proceed to Step 3
+
+---
+
+## Step 3 — Sensitive file permissions
 
 ### /etc/shadow & /etc/passwd:
 
@@ -52,7 +77,7 @@ When prompted for password, hit Enter (blank).
 
 ---
 
-## Step 3 — Credential Harvesting
+## Step 4 — Credential Harvesting
 
 Read-only filesystem enum for credential-bearing artefacts. Stealth-positive — bash history of read commands is the only IOC.
 
@@ -61,11 +86,11 @@ Read-only filesystem enum for credential-bearing artefacts. Stealth-positive —
 3. [[SSH Keys]]
 4. Process Command-Line Args — *stub; skip. Build canonically when first encountered in the wild.* (Does this cover cleartext creds in env vars?)
 
-All four exhausted with no elevation → proceed to Step 4.
+All four exhausted with no elevation → proceed to Step 5.
 
 ---
 
-## Step 4 — Scheduled execution
+## Step 5 — Scheduled execution
 
 On **attacker**:
 
@@ -86,11 +111,11 @@ Route on output markers:
 - `WILDCARD[root,cron]: <dir>:<file>:<line>:<body>` → [[Cron Wildcards]]
 - `WILDCARD[root,anacron]: <dir>:<file>:<line>:<body>` → [[Anacron Wildcards]]
 - `WILDCARD[root,at]: <dir>:<file>:<line>:<body>` → [[At-job Wildcards]]
-- No markers → no scheduled-execution PrivEsc route, proceed to Step 5
+- No markers → no scheduled-execution PrivEsc route, proceed to Step 6
 
 ---
 
-## Step 5 — Systemd hijacking 
+## Step 6 — Systemd hijacking 
 
 ⚠️ **Build-when-encountered.** `~/scripts/systemd_enum.sh` is deferred — no script body exists yet. On first real-box encounter of this step: build the script from first principles against the live target (which is the canonical validation context), conforming to the marker contract below. The marker contract is the locked architectural shape only — specific marker names and field structure are likely to refine when the script is built against real systemd output. 
 
@@ -111,10 +136,10 @@ Route on output markers:
 - `WRITABLE_DROPIN[root]: <path>` → [[Systemd Drop-in File Permissions]] 
 - `WRITABLE_EXECSTART[root]: <path>` → [[Systemd ExecStart Hijack]] 
 - `WRITABLE_SYSTEMD_PATH_DIR[root]: <dir>` → [[Systemd PATH]] 
-- No markers → no systemd-hijacking PrivEsc route, proceed to Step 6 
+- No markers → no systemd-hijacking PrivEsc route, proceed to Step 7 
  
 ---
-## Step 6 — Root-owned services
+## Step 7 — Root-owned services
 
 `ps -ef | awk '$1=="root" && $8 !~ /^\[/'`
 
@@ -125,7 +150,7 @@ Route on output markers:
 
 ---
 
-## Step 7 — NFS exports
+## Step 8 — NFS exports
 
 `cat /etc/exports 2>/dev/null`
 
@@ -134,7 +159,7 @@ Route on output markers:
 
 ---
 
-## Step 8 — PATH abuse
+## Step 9 — PATH abuse
 
 `echo $PATH; for d in $(echo $PATH | tr ':' ' '); do test -w "$d" && echo "WRITABLE: $d"; done`
 
@@ -143,7 +168,7 @@ Route on output markers:
 
 ---
 
-## Step 9 — Capabilities
+## Step 10 — Capabilities
 
 `getcap -r / 2>/dev/null`
 
@@ -154,13 +179,13 @@ Route on output markers:
 
 ---
 
-## Step 10 — SUID / SGID binaries
+## Step 11 — SUID / SGID binaries
 
 ⚠️ High IOC. Full filesystem traversal — run once; the technique walkthroughs reuse this output, they do not re-run the `find`.
 
 `find / -type f \( -perm -4000 -o -perm -2000 \) -exec ls -l {} + 2>/dev/null`
 
-(No output → proceed to Step 11)
+(No output → proceed to Step 12)
 
 Try the below technique walkthroughs in stealth-first order. Each receives this list (the output from the above command), self-selects the binaries it applies to, loops them, and returns here on exhaustion to try the next:
 
@@ -170,13 +195,13 @@ Try the below technique walkthroughs in stealth-first order. Each receives this 
 4. [[SUID Function Export Hijack]]
 5. [[SUID PS4 Debug Trace]]
 
-All five exhausted with no elevation → proceed to Step 11.
+All five exhausted with no elevation → proceed to Step 12.
 
 ---
 
-## Step 11 — Kernel exploits
+## Step 12 — Kernel exploits
 
-⚠️ Kernel exploits risk kernel panics — box may need reset. Run only after Steps 0–10 fall through.
+⚠️ Kernel exploits risk kernel panics — box may need reset. Run only after Steps 0–11 fall through.
 
 `uname -r`
 
@@ -191,7 +216,7 @@ From the populated files, identify and record `<distro>` (e.g. Debian, Ubuntu, R
 
 ---
 
-## Step 12 — Automated enumeration (linpeas)
+## Step 13 — Automated enumeration (linpeas)
 
 ⚠️ Maximum IOC. Comprehensive backstop.
 
@@ -221,7 +246,7 @@ Focus on red+yellow flagged findings. Route each finding back to the appropriate
 
 ## Exhaustion
 
-All thirteen steps fall through:
+All fourteen steps fall through:
 
 1. Re-review `linpeas.out` for less-common findings (kernel keyring, polkit, dbus, custom services).
 2. Deeper enum on app-specific artefacts: `/var/spool/`, `/var/backups/`, `/opt/`, `/srv/`.
