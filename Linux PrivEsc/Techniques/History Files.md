@@ -15,8 +15,8 @@ Paste into target shell.
 
 Route on output markers:
 
-- `HISTORY_CRED[<file>]: <line>` → credential pattern hit. Multiple lines may appear across same and different files. Each is a candidate. Identify target principal from each `<line>` (usually obvious from command context: `mysql -uroot -p<pw>` → root; `ssh alice@host` → alice, etc.) → Proceed to Step 2 with the candidate list.
-- `HISTORY_FOUND: <file>` → informational; script scanned this file, no credential pattern matched. No action.
+- `HISTORY_CRED[<file>]: <line_number>: <line>` → credential pattern hit. Multiple lines may appear across same and different files. Each is a candidate. Identify target principal from each `<line>` (usually obvious from command context: `mysql -uroot -p<pw>` → root; `ssh alice@host` → alice, etc.) → Proceed to Step 2 with the candidate list.
+- `HISTORY_FOUND: <file>` → informational; script scanned this file, no credential pattern matched. No action (**delete or ignore**).
 - `HISTORY_EMPTY` → no readable history files exist. Technique inapplicable. Return to [[Linux Privilege Escalation Checksheet]] `Credential Harvesting`.
 - No `HISTORY_CRED` markers in output → script found no creds in any history file. Return to [[Linux Privilege Escalation Checksheet]] `Credential Harvesting`.
 
