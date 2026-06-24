@@ -12,7 +12,7 @@
 
 ## Step 1 — Preflight
 
-⚠️ `<cmd>` is the value from `RELATIVE_CMD[root,cron]: <cmd>` and `<dir>` is the value from `WRITABLE_PATH_DIR[cron]: <dir>` in [[Linux Privilege Escalation Checksheet]] `Scheduled execution`. If unknown, return there first.
+⚠️ `<cmd>` is the value from `RELATIVE_CMD[root,cron]: <cmd>` and `<dir>` is the value from `WRITABLE_PATH_DIR[cron]: <dir>`, from [[Linux Privilege Escalation Checksheet]] `Scheduled execution`. If unknown, return there first.
 ##### Confirm the cron entry invokes `<cmd>` as a bare name (no slash), and identify `<cron_user>` and `<cron_interval>`: 
 
 `grep -H "<cmd>" /etc/crontab /etc/cron.d/* /var/spool/cron/crontabs/* 2>/dev/null` 
@@ -24,7 +24,7 @@
 - `/etc/crontab` or `/etc/cron.d/<file>` → `<cron_user>` is the field directly before `<cmd>` (6-field format with user).
 - `/var/spool/cron/crontabs/<name>` → `<cron_user>` is `<name>` from the filename (5-field format, no user field in the entry).
 
-**`<cron_interval>` is everything preceding `<cmd>`**: 
+**`<cron_interval>` is everything preceding `<cmd>` OR preceding `<cron_user>`, depending on the file format**: 
 - the five time fields, or a single `@`-string (`@hourly`, `@reboot`, …).
 ##### Confirm writability of `<dir>` — the writable directory in cron's PATH:
 
@@ -37,7 +37,7 @@
 
 `grep -E '^[[:space:]]*PATH=' /etc/crontab`
 
-- Line returned → note the value after `PATH=` as `<cron_path>` (colon-separated, left-to-right priority).
+- Line returned → note the entire value after `PATH=` as `<cron_path>` (colon-separated, left-to-right priority).
 - No output → cron uses its built-in default `PATH=/usr/bin:/bin`. Note `<cron_path>` as `/usr/bin:/bin`.
 
 ##### Confirm `<dir>` is in `<cron_path>` and precedes any current resolution of `<cmd>` (precedence check):

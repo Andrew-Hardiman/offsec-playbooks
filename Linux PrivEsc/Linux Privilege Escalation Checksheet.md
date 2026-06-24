@@ -84,7 +84,7 @@ Read-only filesystem enum for credential-bearing artefacts. Stealth-positive —
 1. [[History Files]]
 2. [[Config Files]]
 3. [[SSH Keys]]
-4. Process Command-Line Args — *stub; skip. Build canonically when first encountered in the wild.* (Does this cover cleartext creds in env vars?)
+4. [[Process cmdline & environ]] — *stub; skip. Build canonically when first encountered in the wild — walkthrough + `~/scripts/proc_enum.sh` covering `/proc/*/cmdline` and `/proc/*/environ`, parallel to History Files / Config Files / SSH Keys.*
 
 All four exhausted with no elevation → proceed to Step 5.
 
@@ -94,7 +94,7 @@ All four exhausted with no elevation → proceed to Step 5.
 
 On **attacker**:
 
-`(echo "bash <<'EOF'"; cat ~/scripts/sched_enum.sh; echo "EOF") | xclip -selection clipboard`
+`(echo "bash <<'EOF'"; sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' ~/scripts/sched_enum.sh; echo "EOF") | xclip -selection clipboard`
 
 (Wayland: substitute `wl-copy` for `xclip -selection clipboard`.)
 

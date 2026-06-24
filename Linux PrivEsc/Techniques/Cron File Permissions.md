@@ -29,10 +29,10 @@ Otherwise:
 `grep -H "$(basename <script>)" /etc/crontab /etc/cron.d/* /var/spool/cron/crontabs/* 2>/dev/null`
 
 **Source of the matched line determines `<cron_user>`:**
-- `/etc/crontab` or `/etc/cron.d/<file>` → `<cron_user>` is the field directly before the command (6-field format with user).
+- `/etc/crontab` or `/etc/cron.d/<file>` → `<cron_user>` is the field directly before the command (e.g. `/etc/crontab:* * * * * root overwrite.sh` → `<cron_user>` is `root`).
 - `/var/spool/cron/crontabs/<name>` → `<cron_user>` is `<name>` from the filename (5-field format, no user field in the entry).
 
-**`<cron_interval>` is everything preceding the command:**  
+**`<cron_interval>` is everything preceding the `<cron_user>` OR preceding the command, depending on file format:**  
 - the five time fields, or a single `@`-string (`@hourly`, `@reboot`, …).
 
 ##### Confirm `<script>` is a shell script, not a binary: 

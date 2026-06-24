@@ -17,14 +17,14 @@
 
 ##### Confirm `<body>` is a real command invocation, not a string or comment:
 
-Read `<body>`. The wildcard binary must be _executed_ on that line — not assigned to a variable (`PATTERN="tar … *"`), embedded in a here-doc/quoted string, or commented.
+Read `<body>`. The wildcard binary must be _executed_ on that line — not assigned to a variable (`$PATTERN="tar … *"`), embedded in a here-doc/quoted string, or commented.
 
 - `<body>` is a live command invocation → proceed.
 - `<body>` is a variable assignment, quoted string, or comment → false positive. Try the next `WILDCARD` marker; if none, Cron Wildcards not applicable.
 
 ##### Identify the binary:
 
-- `tar` → proceed through this walkthrough (Steps 2–5).
+- `tar` → proceed.
 - `rsync` → exploitable **only if `<body>` includes a remote spec** (a `host:path` or rsync-daemon `host::module` target that makes rsync invoke a remote shell). Local-only `rsync … *` does not fire `-e`. ⚠️ Payload deferred — rsync flag behaviour pending Kali verification. If a remote spec is present, stop and flag for build-out; otherwise treat as not applicable.
 - `chmod`, `chown`, `gzip` → not an exec vector via wildcard. Broad-grep artefact. Try the next `WILDCARD` marker; if none, Cron Wildcards not applicable.
 
@@ -59,10 +59,10 @@ Read `<body>`.
 `grep -H "$(basename <file>)" /etc/crontab /etc/cron.d/* /var/spool/cron/crontabs/* 2>/dev/null`
 
 **Source of the matched line determines `<cron_user>`:**
-- `/etc/crontab` or `/etc/cron.d/<file>` → `<cron_user>` is the field directly before the command (6-field format with user).
+- `/etc/crontab` or `/etc/cron.d/<file>` → `<cron_user>` is the field directly before the command (e.g `/etc/crontab:* * * * * root /usr/local/bin/compress.sh` → `<cron_user>` is `root`).
 - `/var/spool/cron/crontabs/<name>` → `<cron_user>` is `<name>` from the filename (5-field format, no user field in the entry).
 
-**`<cron_interval>` is everything preceding the command:**  
+**`<cron_interval>` is everything preceding the command OR preceding `<cron_user>`, depending on the file format:**  
 - the five time fields, or a single `@`-string (`@hourly`, `@reboot`, …).
 
 ##### Confirm UID 0 for `<cron_user>`:
