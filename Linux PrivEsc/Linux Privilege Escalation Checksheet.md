@@ -145,8 +145,12 @@ Route on output markers:
 
 - `mysqld` running as root → [[MySQL UDF]]
 - `postgres` running as root → [[Postgres UDF]]
+- `redis-server` running as root → [[Redis Configuration File Write]]
+- `org.apache.catalina.startup.Bootstrap` in cmdline args, running as root → [[Tomcat Manager WAR Deploy]]
 - Any other root-owned service → [[Service Known Exploits]]
 - Nothing → proceed
+
+> **Architectural note.** Enumeration filters to UID=root by design. The rare case of a non-root daemon with a CVE that directly grants root is excluded by this filter. If that case is ever encountered, the response is pre-decided: drop the awk root filter, rename the step, update inline bullets with explicit "running as root" qualifiers, broaden Service Known Exploits to UID-agnostic. **No re-deliberation.** Full reasoning in Vault_Strategy.md `Decisions held` — search "service known exploits root-gating decision".
 
 ---
 
@@ -171,6 +175,8 @@ Route on output markers:
 ## Step 10 — Capabilities
 
 `getcap -r / 2>/dev/null`
+
+(**Is there a coverage gap with this step, I think probably yes. This step enumerates FILE caps (`getcap -r /`), but does not enumerate RUNNING PROCESS caps (`getpcaps <pid>`)**). 
 
 - `cap_setuid+ep` on standard binary (e.g. `/usr/bin/python3`, `/usr/bin/perl`) → [[Capability Abuse]]
 - `cap_dac_read_search+ep` on accessible binary → [[Capability Abuse]]
