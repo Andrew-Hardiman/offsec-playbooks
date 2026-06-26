@@ -43,7 +43,7 @@ On **attacker**:
 
 (Wayland: substitute `wl-copy`.) 
 
-Paste into target shell. Wait for `SSH_WIDE_PASS_DONE`, then route any `SSH_PEM_OUTLIER` markers through the handlers above.
+Paste into target shell. Wait for `SSH_WIDE_PASS_DONE`, then route any `SSH_PEM_OUTLIER` markers through the handlers below.
 
 No `SSH_PEM_OUTLIER` after wide pass → no keys found. Return to [[Linux Privilege Escalation Checksheet]] `Credential Harvesting`.
 
@@ -87,18 +87,20 @@ Try from **target** first; if foothold too limited for interactive SSH or `Conne
 - Shell returned → `id`. Root → Decision. Non-root → lateral foothold; re-enter [[Linux Privilege Escalation Checksheet]] from that context.
 - `Permission denied (publickey)` → key not authorized for `<user>`; try next `<user>`.
 - `Too many authentication failures` → `ssh -o IdentitiesOnly=yes -i <file> <user>@localhost`
-- `Connection refused` or SSH unavailable from target → fallback to from **target** below.
+- `Connection refused` or SSH unavailable from target → fallback to from **attacker** below.
 - All users exhausted → next key.
 
 ##### From **attacker** (fallback — foothold shell too limited for interactive SSH, or SSH not listening on localhost):
 
 `cat <file>`
 
-Copy displayed output (`-----BEGIN` through `-----END` inclusive). On **attacker**:
+Copy displayed output (`-----BEGIN` through `-----END` inclusive). 
+
+On **attacker**:
 
 `cat > /tmp/key.pem << 'EOF'`
 
-(Paste key, then on a new line type `EOF` and Enter.)
+(Paste key, Enter, then on a new line type `EOF` and Enter.)
 
 `chmod 600 /tmp/key.pem`
 
