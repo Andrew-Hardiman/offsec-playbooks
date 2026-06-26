@@ -119,11 +119,11 @@ Route on output markers:
 
 ⚠️ **Build-when-encountered.** `~/scripts/systemd_enum.sh` is deferred — no script body exists yet. On first real-box encounter of this step: build the script from first principles against the live target (which is the canonical validation context), conforming to the marker contract below. The marker contract is the locked architectural shape only — specific marker names and field structure are likely to refine when the script is built against real systemd output. 
 
-Once `~/scripts/systemd_enum.sh` exists, invoke per the Step 4 pattern: 
+Once `~/scripts/systemd_enum.sh` exists, invoke per the `Scheduled execution` pattern:
 
 On **attacker**: 
 
-`(echo "bash <<'EOF'"; cat ~/scripts/systemd_enum.sh; echo "EOF") | xclip -selection clipboard` 
+`(echo "bash <<'EOF'"; sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' ~/scripts/systemd_enum.sh; echo "EOF") | xclip -selection clipboard`
 
 (Wayland: substitute `wl-copy` for `xclip -selection clipboard`.) 
 
@@ -172,7 +172,29 @@ Route on output markers:
 
 ---
 
-## Step 10 — Capabilities
+## Step 10 — Library abuse
+
+⚠️ **Build-when-encountered.** `~/scripts/lib_enum.sh` is deferred — no script body exists yet. On first real-box encounter of this step: build the script from first principles against the live target (which is the canonical validation context), conforming to the marker contract below. The marker contract is the locked architectural shape only — specific marker names and field structure are likely to refine when the script is actually written against real linker-search output.
+
+Once `~/scripts/lib_enum.sh` exists, invoke per the `Scheduled execution` pattern:
+
+On **attacker**:
+
+`(echo "bash <<'EOF'"; sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' ~/scripts/lib_enum.sh; echo "EOF") | xclip -selection clipboard`
+
+(Wayland: substitute `wl-copy` for `xclip -selection clipboard`.)
+
+Paste into target shell.
+
+Route on output markers:
+
+- `WRITABLE_LIB_DIR: <dir>` → [[Library Hijack]]
+- `WRITABLE_LIB_FILE: <path>` → [[Library Hijack]]
+- No markers → no library-abuse PrivEsc route, proceed to Step 11
+
+---
+
+## Step 11 — Capabilities
 
 `getcap -r / 2>/dev/null`
 
@@ -185,13 +207,13 @@ Route on output markers:
 
 ---
 
-## Step 11 — SUID / SGID binaries
+## Step 12 — SUID / SGID binaries
 
 ⚠️ High IOC. Full filesystem traversal — run once; the technique walkthroughs reuse this output, they do not re-run the `find`.
 
 `find / -type f \( -perm -4000 -o -perm -2000 \) -exec ls -l {} + 2>/dev/null`
 
-(No output → proceed to Step 12)
+(No output → proceed to Step 13)
 
 Try the below technique walkthroughs in stealth-first order. Each receives this list (the output from the above command), self-selects the binaries it applies to, loops them, and returns here on exhaustion to try the next:
 
@@ -201,13 +223,13 @@ Try the below technique walkthroughs in stealth-first order. Each receives this 
 4. [[SUID Function Export Hijack]]
 5. [[SUID PS4 Debug Trace]]
 
-All five exhausted with no elevation → proceed to Step 12.
+All five exhausted with no elevation → proceed to Step 13.
 
 ---
 
-## Step 12 — Kernel exploits
+## Step 13 — Kernel exploits
 
-⚠️ Kernel exploits risk kernel panics — box may need reset. Run only after Steps 0–11 fall through.
+⚠️ Kernel exploits risk kernel panics — box may need reset. Run only after Steps 0–12 fall through.
 
 `uname -r`
 
@@ -222,7 +244,7 @@ From the populated files, identify and record `<distro>` (e.g. Debian, Ubuntu, R
 
 ---
 
-## Step 13 — Automated enumeration (linpeas)
+## Step 14 — Automated enumeration (linpeas)
 
 ⚠️ Maximum IOC. Comprehensive backstop.
 
@@ -252,7 +274,7 @@ Focus on red+yellow flagged findings. Route each finding back to the appropriate
 
 ## Exhaustion
 
-All fourteen steps fall through:
+All fifteen steps fall through:
 
 1. Re-review `linpeas.out` for less-common findings (kernel keyring, polkit, dbus, custom services).
 2. Deeper enum on app-specific artefacts: `/var/spool/`, `/var/backups/`, `/opt/`, `/srv/`.
