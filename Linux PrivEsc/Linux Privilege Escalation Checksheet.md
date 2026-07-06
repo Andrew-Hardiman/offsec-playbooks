@@ -92,6 +92,8 @@ All four exhausted with no elevation → proceed to Step 5.
 
 ## Step 5 — Scheduled execution
 
+### Cron / anacron / at substrate:
+
 On **attacker**:
 
 `(echo "bash <<'EOF'"; sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' ~/scripts/sched_enum.sh; echo "EOF") | xclip -selection clipboard`
@@ -111,7 +113,22 @@ Route on output markers:
 - `WILDCARD[root,cron]: <dir>:<file>:<line>:<body>` → [[Cron Wildcards]]
 - `WILDCARD[root,anacron]: <dir>:<file>:<line>:<body>` → [[Anacron Wildcards]]
 - `WILDCARD[root,at]: <dir>:<file>:<line>:<body>` → [[At-job Wildcards]]
-- No markers → no scheduled-execution PrivEsc route, proceed to Step 6
+
+### Logrotate config permissions:
+
+Trigger-agnostic — logrotate runs via cron and/or systemd timer; the exploit fires on rotation regardless of which. Paste into target shell:
+
+On **target:**
+
+`test -w /etc/logrotate.conf 2>/dev/null && echo "WRITABLE_LOGROTATE_CONFIG: /etc/logrotate.conf"; test -w /etc/logrotate.d 2>/dev/null && echo "WRITABLE_LOGROTATE_CONFIG: /etc/logrotate.d"; for f in /etc/logrotate.d/*; do [ -f "$f" ] || continue; test -w "$f" 2>/dev/null && echo "WRITABLE_LOGROTATE_CONFIG: $f"; done`
+
+Route on output markers:
+
+- `WRITABLE_LOGROTATE_CONFIG: <path>` → [[Logrotate Config Permissions]], use `<path>` as `<config>`
+
+### No route:
+
+No markers from either block → no scheduled-execution PrivEsc route, proceed to Step 6
 
 ---
 
