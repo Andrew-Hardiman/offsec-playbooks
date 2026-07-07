@@ -132,7 +132,9 @@ No markers from either block → no scheduled-execution PrivEsc route, proceed t
 
 ---
 
-## Step 6 — Systemd hijacking 
+## Step 6 — Init system hijacking 
+
+### Systemd unit files:
 
 ⚠️ **Build-when-encountered.** `~/scripts/systemd_enum.sh` is deferred — no script body exists yet. On first real-box encounter of this step: build the script from first principles against the live target (which is the canonical validation context), conforming to the marker contract below. The marker contract is the locked architectural shape only — specific marker names and field structure are likely to refine when the script is built against real systemd output. 
 
@@ -153,7 +155,52 @@ Route on output markers:
 - `WRITABLE_DROPIN[root]: <path>` → [[Systemd Drop-in File Permissions]] 
 - `WRITABLE_EXECSTART[root]: <path>` → [[Systemd ExecStart Hijack]] 
 - `WRITABLE_SYSTEMD_PATH_DIR[root]: <dir>` → [[Systemd PATH]] 
-- No markers → no systemd-hijacking PrivEsc route, proceed to Step 7 
+- No output → continue to next sub-block.
+### Init.d scripts:
+
+⚠️ `[[Init.d Script Permissions]]` walkthrough body — build-when-encountered. Points to include: (1) trigger family is boot (rcS.d/rc*.d) + runlevel transitions (`init <N>`) + **admin** invocations (`service <name> {start|restart|stop}`), not reboot-only; (2) payload = SUID bash (`chmod 4755`), not `chmod +x`; (3) artefact naming + drop-dir per `[[Stealth Drop Dir Probe]]`; (4) writable-but-non-executable exploitable only if foothold user can `chmod +x` (owns file) — walkthrough discriminates; (5) manual invocation from foothold shell only inherits foothold uid.
+
+On **target:**
+
+`for f in /etc/init.d/*; do [ -f "$f" ] && test -w "$f" && echo "WRITABLE_INITD: $f"; done; echo "INITD_SCANNED: /etc/init.d/"`
+
+Route on output markers:
+
+- `WRITABLE_INITD: <path>` → [[Init.d Script Permissions]], use `<path>` as `<script>`
+- `INITD_SCANNED: /etc/init.d/` with no preceding `WRITABLE_INITD` → check completed cleanly, no writable init.d scripts. Continue to next sub-block.
+- No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
+
+### rc.local:
+
+⚠️ `[[rc.local Permissions]]` walkthrough body — build-when-encountered. Points to include: (1) trigger family is boot-only (wired via S99rc.local at end of runlevel); (2) modern systemd distros ship `rc-local.service` with `ConditionFileIsExecutable=/etc/rc.local` — file needs execute bit for systemd to fire it; (3) payload = SUID bash (`chmod 4755`); (4) manual invocation from foothold shell inherits foothold uid — MUST wait for boot.
+
+On **target:**
+
+`[ -f /etc/rc.local ] && test -w /etc/rc.local && echo "WRITABLE_RC_LOCAL: /etc/rc.local"; echo "RC_LOCAL_SCANNED: /etc/rc.local"`
+
+Route on output markers:
+
+- `WRITABLE_RC_LOCAL: /etc/rc.local` → [[rc.local Permissions]]
+- `RC_LOCAL_SCANNED: /etc/rc.local` with no preceding `WRITABLE_RC_LOCAL` → check completed cleanly, rc.local not writable or absent. Continue to next sub-block.
+- No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
+
+### Runlevel symlink directories:
+
+⚠️ `[[Runlevel Directory Symlink Drop]]` walkthrough body — build-when-encountered. Points to include: (1) trigger family is boot + runlevel transitions (`init <N>`); (2) exploit shape = drop new symlink `S99<name>` in writable rc*.d/ dir pointing to attacker-owned executable script (needs execute bit) — NOT edit existing file; (3) payload = SUID bash in symlink target; (4) artefact naming per `[[Stealth Drop Dir Probe]]`.
+
+On **target:**
+
+`for d in /etc/rc0.d /etc/rc1.d /etc/rc2.d /etc/rc3.d /etc/rc4.d /etc/rc5.d /etc/rc6.d /etc/rcS.d; do [ -d "$d" ] && test -w "$d" && echo "WRITABLE_RC_D_DIR: $d"; done; echo "RC_D_SCANNED"`
+
+Route on output markers:
+
+- `WRITABLE_RC_D_DIR: <dir>` → [[Runlevel Directory Symlink Drop]], use `<dir>` as `<rc_dir>`
+- `RC_D_SCANNED` with no preceding `WRITABLE_RC_D_DIR` → check completed cleanly, no writable runlevel dirs. Continue to next sub-block.
+- No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
+
+### No route:
+
+No markers from any sub-block → no init-system-hijacking PrivEsc route, proceed to Step 7 
  
 ---
 
@@ -170,7 +217,7 @@ Route on output markers:
 - `WRITABLE_SHELL_INIT: <path>` → [[Shell Startup File Permissions]], use `<path>` as `<init_file>`
 - `SHELL_INIT_INAPPLICABLE: <shell>` → interactive root login blocked. No shell-startup route. Proceed to Step 8.
 - `SHELL_INIT_UNKNOWN_SHELL: <shell>` → root's shell not recognized. Log for manual investigation, proceed to Step 8.
-- `SHELL_INIT_SCANNED: <shell>` with no preceding `WRITABLE_SHELL_INIT` → check completed cleanly, no writable init files for root's shell. Proceed to Step 8.
+- `SHELL_INIT_SCANNED: <shell>` **with no preceding `WRITABLE_SHELL_INIT`** → check completed cleanly, no writable init files for root's shell. Proceed to Step 8.
 - No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
 
 ---
