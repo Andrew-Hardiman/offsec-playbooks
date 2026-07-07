@@ -156,7 +156,26 @@ Route on output markers:
 - No markers → no systemd-hijacking PrivEsc route, proceed to Step 7 
  
 ---
-## Step 7 — Root-owned services
+
+## Step 7 — Shell startup hijacking
+
+⚠️ `[[Shell Startup File Permissions]]` walkthrough body — build-when-encountered. Include yield caveat: OSCP+/lab/CTF yield high (admin simulation triggers regularly on target boxes); real-engagement yield time-variable (production servers may go weeks between root interactive logins). Not a descope reason — vector is valid, timing is context-dependent.
+
+On **target:**
+
+`clear; r=$(getent passwd root 2>/dev/null | cut -d: -f7); [ -z "$r" ] && r=$(awk -F: '$1=="root"{print $7}' /etc/passwd 2>/dev/null); case "$r" in /sbin/nologin|/usr/sbin/nologin|/bin/false|/usr/bin/false) echo "SHELL_INIT_INAPPLICABLE: $r" ;; /bin/bash|/usr/bin/bash|/bin/rbash) for f in /etc/profile /etc/profile.d/*.sh /etc/bash.bashrc /etc/bashrc; do [ -e "$f" ] && test -w "$f" && echo "WRITABLE_SHELL_INIT: $f"; done; echo "SHELL_INIT_SCANNED: $r" ;; /bin/sh|/bin/dash) for f in /etc/profile /etc/profile.d/*.sh; do [ -e "$f" ] && test -w "$f" && echo "WRITABLE_SHELL_INIT: $f"; done; echo "SHELL_INIT_SCANNED: $r" ;; /bin/zsh|/usr/bin/zsh) for f in /etc/zsh/zshenv /etc/zsh/zprofile /etc/zsh/zshrc /etc/zsh/zlogin; do [ -e "$f" ] && test -w "$f" && echo "WRITABLE_SHELL_INIT: $f"; done; echo "SHELL_INIT_SCANNED: $r" ;; /bin/csh|/bin/tcsh) for f in /etc/csh.cshrc /etc/csh.login; do [ -e "$f" ] && test -w "$f" && echo "WRITABLE_SHELL_INIT: $f"; done; echo "SHELL_INIT_SCANNED: $r" ;; *) echo "SHELL_INIT_UNKNOWN_SHELL: $r" ;; esac`
+
+Route on output markers:
+
+- `WRITABLE_SHELL_INIT: <path>` → [[Shell Startup File Permissions]], use `<path>` as `<init_file>`
+- `SHELL_INIT_INAPPLICABLE: <shell>` → interactive root login blocked. No shell-startup route. Proceed to Step 8.
+- `SHELL_INIT_UNKNOWN_SHELL: <shell>` → root's shell not recognized. Log for manual investigation, proceed to Step 8.
+- `SHELL_INIT_SCANNED: <shell>` with no preceding `WRITABLE_SHELL_INIT` → check completed cleanly, no writable init files for root's shell. Proceed to Step 8.
+- No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
+
+---
+
+## Step 8 — Root-owned services
 
 `ps -ef | awk '$1=="root" && $8 !~ /^\[/'`
 
@@ -171,7 +190,7 @@ Route on output markers:
 
 ---
 
-## Step 8 — NFS exports
+## Step 9 — NFS exports
 
 `cat /etc/exports 2>/dev/null`
 
@@ -180,7 +199,7 @@ Route on output markers:
 
 ---
 
-## Step 9 — PATH abuse
+## Step 10 — PATH abuse
 
 `echo $PATH; for d in $(echo $PATH | tr ':' ' '); do test -w "$d" && echo "WRITABLE: $d"; done`
 
@@ -189,7 +208,7 @@ Route on output markers:
 
 ---
 
-## Step 10 — Library abuse
+## Step 11 — Library abuse
 
 ⚠️ **Build-when-encountered.** `~/scripts/lib_enum.sh` is deferred — no script body exists yet. On first real-box encounter of this step: build the script from first principles against the live target (which is the canonical validation context), conforming to the marker contract below. The marker contract is the locked architectural shape only — specific marker names and field structure are likely to refine when the script is actually written against real linker-search output.
 
@@ -207,11 +226,11 @@ Route on output markers:
 
 - `WRITABLE_LIB_DIR: <dir>` → [[Library Hijack]]
 - `WRITABLE_LIB_FILE: <path>` → [[Library Hijack]]
-- No markers → no library-abuse PrivEsc route, proceed to Step 11
+- No markers → no library-abuse PrivEsc route, proceed to Step 12
 
 ---
 
-## Step 11 — Capabilities
+## Step 12 — Capabilities
 
 `getcap -r / 2>/dev/null`
 
@@ -224,13 +243,13 @@ Route on output markers:
 
 ---
 
-## Step 12 — SUID / SGID binaries
+## Step 13 — SUID / SGID binaries
 
 ⚠️ High IOC. Full filesystem traversal — run once; the technique walkthroughs reuse this output, they do not re-run the `find`.
 
 `find / -type f \( -perm -4000 -o -perm -2000 \) -exec ls -l {} + 2>/dev/null`
 
-(No output → proceed to Step 13)
+(No output → proceed to Step 14)
 
 Try the below technique walkthroughs in stealth-first order. Each receives this list (the output from the above command), self-selects the binaries it applies to, loops them, and returns here on exhaustion to try the next:
 
@@ -240,13 +259,13 @@ Try the below technique walkthroughs in stealth-first order. Each receives this 
 4. [[SUID Function Export Hijack]]
 5. [[SUID PS4 Debug Trace]]
 
-All five exhausted with no elevation → proceed to Step 13.
+All five exhausted with no elevation → proceed to Step 14.
 
 ---
 
-## Step 13 — Kernel exploits
+## Step 14 — Kernel exploits
 
-⚠️ Kernel exploits risk kernel panics — box may need reset. Run only after Steps 0–12 fall through.
+⚠️ Kernel exploits risk kernel panics — box may need reset. Run only after Steps 0–13 fall through.
 
 `uname -r`
 
@@ -261,7 +280,7 @@ From the populated files, identify and record `<distro>` (e.g. Debian, Ubuntu, R
 
 ---
 
-## Step 14 — Automated enumeration (linpeas)
+## Step 15 — Automated enumeration (linpeas)
 
 ⚠️ Maximum IOC. Comprehensive backstop.
 
@@ -291,7 +310,7 @@ Focus on red+yellow flagged findings. Route each finding back to the appropriate
 
 ## Exhaustion
 
-All fifteen steps fall through:
+All sixteen steps fall through:
 
 1. Re-review `linpeas.out` for less-common findings (kernel keyring, polkit, dbus, custom services).
 2. Deeper enum on app-specific artefacts: `/var/spool/`, `/var/backups/`, `/opt/`, `/srv/`.
