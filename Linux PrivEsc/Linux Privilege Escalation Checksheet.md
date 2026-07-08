@@ -222,7 +222,72 @@ Route on output markers:
 
 ---
 
-## Step 8 — Root-owned services
+## Step 8 — D-Bus hijacking
+
+**Probe** — D-Bus presence:
+
+On **target:**
+
+`if [ -d /usr/share/dbus-1 ] || [ -d /etc/dbus-1 ]; then echo "DBUS_PRESENT"; else echo "DBUS_INAPPLICABLE: no /usr/share/dbus-1 or /etc/dbus-1"; fi`
+
+Route on output markers:
+
+- `DBUS_INAPPLICABLE: <path list>` → no D-Bus on this box, skip all sub-sections, proceed to Step 9
+- `DBUS_PRESENT` → proceed to sub-sections below
+- No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
+
+### Policy files:
+
+⚠️ `[[D-Bus Policy Permissions]]` walkthrough body — build-when-encountered. Points to include: (1) modern dbus-daemon (1.10+) watches policy directories via inotify and reloads automatically — attacker edits policy, next method call carries the new permission with no explicit trigger action needed; (2) older dbus-daemon needs SIGHUP, explicit `ReloadConfig` method call, or dbus-daemon restart to re-read config; (3) attack shape (existing file): add `<allow>` rule granting foothold uid permission to call privileged method; (4) attack shape (writable dir): drop new `.conf` file with attacker-crafted `<allow>` rules; (5) trigger: any D-Bus method call from foothold uid after policy reload — high-value targets include systemd's `StartTransientUnit`, polkit's action registration.
+
+On **target:**
+
+`for d in /etc/dbus-1/system.d /usr/share/dbus-1/system.d; do [ -d "$d" ] && test -w "$d" && echo "WRITABLE_DBUS_POLICY_DIR: $d"; for f in "$d"/*.conf; do [ -f "$f" ] && test -w "$f" && echo "WRITABLE_DBUS_POLICY: $f"; done; done; echo "DBUS_POLICY_SCANNED"`
+
+Route on output markers:
+
+- `WRITABLE_DBUS_POLICY: <path>` → [[D-Bus Policy Permissions]], use `<path>` as `<policy_file>`
+- `WRITABLE_DBUS_POLICY_DIR: <dir>` → [[D-Bus Policy Permissions]], drop-new-file case, use `<dir>` as `<policy_dir>`
+- `DBUS_POLICY_SCANNED` with no preceding `WRITABLE_DBUS_POLICY*` → check completed cleanly, no writable policy files or dirs. Continue to next sub-block.
+- No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
+
+### Service activation files:
+
+⚠️ `[[D-Bus Service Activation]]` walkthrough body — build-when-encountered. Points to include: (1) no daemon reload needed — dbus-daemon reads .service files on demand when a bus name is claimed; (2) attack shape (existing file): edit `Exec=` to attacker payload AND set `User=root`; (3) attack shape (writable dir): drop new `.service` with attacker-chosen bus name, `Exec=` payload, `User=root`; (4) payload template must include `User=root` — attacker sets execution uid, no upstream discrimination needed; (5) trigger: any client requesting the target bus name (`dbus-send --system --dest=<name> ...`).
+
+On **target:**
+
+`for d in /etc/dbus-1/system-services /usr/share/dbus-1/system-services /usr/local/share/dbus-1/system-services; do [ -d "$d" ] && test -w "$d" && echo "WRITABLE_DBUS_SERVICE_DIR: $d"; for f in "$d"/*.service; do [ -f "$f" ] && test -w "$f" && echo "WRITABLE_DBUS_SERVICE: $f"; done; done; echo "DBUS_SERVICE_SCANNED"`
+
+Route on output markers:
+
+- `WRITABLE_DBUS_SERVICE: <path>` → [[D-Bus Service Activation]], use `<path>` as `<service_file>`
+- `WRITABLE_DBUS_SERVICE_DIR: <dir>` → [[D-Bus Service Activation]], drop-new-file case, use `<dir>` as `<service_dir>`
+- `DBUS_SERVICE_SCANNED` with no preceding `WRITABLE_DBUS_SERVICE*` → check completed cleanly, no writable service activation files or dirs. Continue to next sub-block.
+- No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
+
+### Main daemon config:
+
+⚠️ `[[D-Bus Main Config Permissions]]` walkthrough body — build-when-encountered. Points to include: (1) modern dbus-daemon (1.10+) auto-reloads via inotify; older needs SIGHUP or `ReloadConfig` method call; (2) preferred attack: create `/etc/dbus-1/system-local.conf` if `/etc/dbus-1/` writable → sourced last, no conflict with vendor content, attacker fully controls policy; (3) legacy `/etc/dbus-1/system.conf` override also sourced with `ignore_missing="yes"` — same technique if `system-local.conf` unusable; (4) editing `/usr/share/dbus-1/system.conf` (vendor primary) is rare misconfig — same yield but higher IOC (touching vendor file); (5) payload: `<policy>` block granting foothold user's uid `<allow>` on high-value method (e.g. systemd's `StartTransientUnit`) → invoke method → root RCE via systemd.
+
+On **target:**
+
+`for f in /usr/share/dbus-1/system.conf /etc/dbus-1/system.conf /etc/dbus-1/system-local.conf; do [ -f "$f" ] && test -w "$f" && echo "WRITABLE_DBUS_CONF: $f"; done; [ -d /etc/dbus-1 ] && test -w /etc/dbus-1 && echo "WRITABLE_DBUS_CONF_DIR: /etc/dbus-1"; echo "DBUS_CONF_SCANNED"`
+
+Route on output markers:
+
+- `WRITABLE_DBUS_CONF: <path>` → [[D-Bus Main Config Permissions]], use `<path>` as `<conf_file>`
+- `WRITABLE_DBUS_CONF_DIR: <dir>` → [[D-Bus Main Config Permissions]], drop-new-file case, use `<dir>` as `<conf_dir>`
+- `DBUS_CONF_SCANNED` with no preceding `WRITABLE_DBUS_CONF*` → check completed cleanly, no writable config files or dirs. Continue to next sub-block.
+- No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
+
+### No route:
+
+No markers from any sub-block → no D-Bus hijacking PrivEsc route, proceed to Step 9
+
+---
+
+## Step 9 — Root-owned services
 
 `ps -ef | awk '$1=="root" && $8 !~ /^\[/'`
 
@@ -237,7 +302,7 @@ Route on output markers:
 
 ---
 
-## Step 9 — NFS exports
+## Step 10 — NFS exports
 
 `cat /etc/exports 2>/dev/null`
 
@@ -246,7 +311,7 @@ Route on output markers:
 
 ---
 
-## Step 10 — PATH abuse
+## Step 11 — PATH abuse
 
 `echo $PATH; for d in $(echo $PATH | tr ':' ' '); do test -w "$d" && echo "WRITABLE: $d"; done`
 
@@ -255,7 +320,7 @@ Route on output markers:
 
 ---
 
-## Step 11 — Library abuse
+## Step 12 — Library abuse
 
 ⚠️ **Build-when-encountered.** `~/scripts/lib_enum.sh` is deferred — no script body exists yet. On first real-box encounter of this step: build the script from first principles against the live target (which is the canonical validation context), conforming to the marker contract below. The marker contract is the locked architectural shape only — specific marker names and field structure are likely to refine when the script is actually written against real linker-search output.
 
@@ -273,11 +338,11 @@ Route on output markers:
 
 - `WRITABLE_LIB_DIR: <dir>` → [[Library Hijack]]
 - `WRITABLE_LIB_FILE: <path>` → [[Library Hijack]]
-- No markers → no library-abuse PrivEsc route, proceed to Step 12
+- No markers → no library-abuse PrivEsc route, proceed to Step 13
 
 ---
 
-## Step 12 — Capabilities
+## Step 13 — Capabilities
 
 `getcap -r / 2>/dev/null`
 
@@ -290,13 +355,13 @@ Route on output markers:
 
 ---
 
-## Step 13 — SUID / SGID binaries
+## Step 14 — SUID / SGID binaries
 
 ⚠️ High IOC. Full filesystem traversal — run once; the technique walkthroughs reuse this output, they do not re-run the `find`.
 
 `find / -type f \( -perm -4000 -o -perm -2000 \) -exec ls -l {} + 2>/dev/null`
 
-(No output → proceed to Step 14)
+(No output → proceed to Step 15)
 
 Try the below technique walkthroughs in stealth-first order. Each receives this list (the output from the above command), self-selects the binaries it applies to, loops them, and returns here on exhaustion to try the next:
 
@@ -306,13 +371,13 @@ Try the below technique walkthroughs in stealth-first order. Each receives this 
 4. [[SUID Function Export Hijack]]
 5. [[SUID PS4 Debug Trace]]
 
-All five exhausted with no elevation → proceed to Step 14.
+All five exhausted with no elevation → proceed to Step 15.
 
 ---
 
-## Step 14 — Kernel exploits
+## Step 15 — Kernel exploits
 
-⚠️ Kernel exploits risk kernel panics — box may need reset. Run only after Steps 0–13 fall through.
+⚠️ Kernel exploits risk kernel panics — box may need reset. Run only after Steps 0–14 fall through.
 
 `uname -r`
 
@@ -327,7 +392,7 @@ From the populated files, identify and record `<distro>` (e.g. Debian, Ubuntu, R
 
 ---
 
-## Step 15 — Automated enumeration (linpeas)
+## Step 16 — Automated enumeration (linpeas)
 
 ⚠️ Maximum IOC. Comprehensive backstop.
 
@@ -357,7 +422,7 @@ Focus on red+yellow flagged findings. Route each finding back to the appropriate
 
 ## Exhaustion
 
-All sixteen steps fall through:
+All seventeen steps fall through:
 
 1. Re-review `linpeas.out` for less-common findings (kernel keyring, polkit, dbus, custom services).
 2. Deeper enum on app-specific artefacts: `/var/spool/`, `/var/backups/`, `/opt/`, `/srv/`.
