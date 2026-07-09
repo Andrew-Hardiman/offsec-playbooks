@@ -320,15 +320,19 @@ No markers from any sub-block → no D-Bus hijacking PrivEsc route, proceed to S
 
 ---
 
-## Step 12 — Library abuse
+## Step 12 — Loader hijacking
 
-⚠️ **Build-when-encountered.** `~/scripts/lib_enum.sh` is deferred — no script body exists yet. On first real-box encounter of this step: build the script from first principles against the live target (which is the canonical validation context), conforming to the marker contract below. The marker contract is the locked architectural shape only — specific marker names and field structure are likely to refine when the script is actually written against real linker-search output.
+### Shared object hijacking (system paths):
 
-Once `~/scripts/lib_enum.sh` exists, invoke per the `Scheduled execution` pattern:
+⚠️ `[[Shared Object Hijack]]` walkthrough body — build-when-encountered. Walkthrough is unified across both shared-object sub-blocks (system paths + RPATH/RUNPATH) and branches at top on marker tag. Points to include: (1) trigger: `ld.so` at binary start resolves each `.so` against a search list; two exploitable primitives — writable directory on the list, OR writable `.so` file at a resolved path; on load the constructor (`__attribute__((constructor))`) fires before `main`; (2) payload: `.so` with constructor calling `setresuid(0,0,0); system("/bin/bash -p")`; build: `gcc -shared -fPIC -o <so> <src.c>`; (3) deployment variants gated by marker's FILE/DIR half: overwrite-with-backup (`WRITABLE_SO_FILE`, sticky-safe, preserves inode), rename-swap (`WRITABLE_SO_DIR`, breaks under sticky bit, restoration preserves inode), unlink-and-replace (`WRITABLE_SO_DIR`, destructive fallback); (4) consumer-identification branches on marker tag — untagged marker (from this sub-block) → walkthrough must identify a root-run consumer that links the target `.so` (via `ldd` against root-owned processes and known service binaries — walkthrough author to detail); tagged marker `WRITABLE_SO_*[<binary>]` (from RPATH/RUNPATH sub-block) → consumer is `<binary>` from tag, skip identification; (5) triggering the load — deployment stages the `.so` but does not fire it; the consumer must be invoked in a root context after deployment for the payload to run. Options by consumer class: scheduler-invoked (cron / systemd timer / anacron) → wait for next scheduled fire; running systemd service → wait for natural restart or reboot (foothold-triggered restart needs a writable unit / drop-in — Step 6 territory, not Step 12); sudo NOPASSWD to foothold user → `sudo <consumer>` fires the load in root context; always-on daemon with no scheduled restart → hardest case, typically requires reboot or a legitimate SIGHUP/watchdog respawn path. **Foothold-user direct invocation of the consumer triggers the constructor but runs as foothold uid — no root escalation.** Root-context invocation is mandatory.
+
+⚠️ **Build-when-encountered.** `~/scripts/so_system_enum.sh` is deferred — no script body exists yet. On first real-box encounter: build the script from first principles against the live target (canonical validation context), conforming to the marker contract below. Marker contract is the locked architectural shape only — specific marker names and field structure may refine when the script is written against real linker-search output. Enum scope for this scaffold: parse `/etc/ld.so.conf`, expanding any `include <glob>` directives (typically `include /etc/ld.so.conf.d/*.conf`) to collect all configured search directories; union with default paths `/lib`, `/usr/lib`, `/lib64`, `/usr/lib64`; resolve symlinks and deduplicate by resolved path (usrmerge distros symlink `/lib` → `/usr/lib` and `/lib64` → `/usr/lib64` — dedupe avoids duplicate markers); for each unique directory, independently test the directory itself for writability (emit `WRITABLE_SO_DIR: <dir>` if writable) AND iterate `*.so*` files inside testing each for writability (glob matches versioned libraries like `libfoo.so.1.2.3` which are the norm; emit `WRITABLE_SO_FILE: <path>` per hit). FILE and DIR checks are independent — both may fire on the same directory when the dir is writable AND a file inside is directly writable (unusual but valid). Markers are intentionally untagged — consumer-binary identification is not performed by this enum because tagging would require `ldd`-scanning candidate binaries per finding, adding process-invocation noise this near-silent sub-block is designed to avoid; the walkthrough handles consumer identification per-marker. **Drift warning — cross-script duplication:** the system-paths parse block (parsing `/etc/ld.so.conf`, expanding `include` globs, unioning with defaults, resolving symlinks, deduping) is duplicated in `so_rpath_enum.sh` where it is used as a filter set. Any change to the parse logic here MUST be mirrored in `so_rpath_enum.sh`. When building this script, wrap the parse block with a comment banner naming the sibling script and the parity requirement, so any future edit surfaces the coupling.
+
+Once `~/scripts/so_system_enum.sh` exists, invoke per the `Scheduled execution` pattern:
 
 On **attacker**:
 
-`(echo "bash <<'EOF'"; sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' ~/scripts/lib_enum.sh; echo "EOF") | xclip -selection clipboard`
+`(echo "bash <<'EOF'"; sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' ~/scripts/so_system_enum.sh; echo "EOF") | xclip -selection clipboard`
 
 (Wayland: substitute `wl-copy` for `xclip -selection clipboard`.)
 
@@ -336,9 +340,115 @@ Paste into target shell.
 
 Route on output markers:
 
-- `WRITABLE_LIB_DIR: <dir>` → [[Library Hijack]]
-- `WRITABLE_LIB_FILE: <path>` → [[Library Hijack]]
-- No markers → no library-abuse PrivEsc route, proceed to Step 13
+- `WRITABLE_SO_FILE: <path>` → [[Shared Object Hijack]], system-paths variant, use `<path>` as `<so_file>`
+- `WRITABLE_SO_DIR: <dir>` → [[Shared Object Hijack]], system-paths variant, drop-new-file case, use `<dir>` as `<so_dir>`
+- `SO_SYSTEM_SCANNED` with no preceding `WRITABLE_SO_*` → check completed cleanly, no writable shared object targets on system paths. Continue to next sub-block.
+- No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
+
+### Shared object hijacking (RPATH/RUNPATH):
+
+⚠️ **Elevated IOC.** This sub-block runs `readelf -d` against binaries in `/usr/bin`, `/usr/sbin`, `/bin`, `/sbin`, `/usr/local/bin`, `/usr/local/sbin`, `/opt` — a burst of 1500–3000 short-lived process invocations, detectable by auditd process-telemetry and EDR. Comparable IOC class to Step 14's SUID `find`, not silent. Per-engagement skip decision belongs here — on high-monitoring targets, skip this sub-block and proceed directly to Interpreted-language library hijacking.
+
+⚠️ Routes to `[[Shared Object Hijack]]` (same walkthrough as system-paths sub-block above); tagged markers `WRITABLE_SO_*[<binary>]` carry the consumer binary in the tag, so the walkthrough skips its consumer-identification step for these.
+
+⚠️ **Build-when-encountered.** `~/scripts/so_rpath_enum.sh` is deferred — no script body exists yet. On first real-box encounter: build the script from first principles against the live target (canonical validation context), conforming to the marker contract below. Marker contract is the locked architectural shape only — specific marker names and field structure may refine when the script is written against real `readelf` output. Enum scope for this scaffold: at start, independently build the system-paths set by parsing `/etc/ld.so.conf` (expanding any `include <glob>` directives, typically `/etc/ld.so.conf.d/*.conf`) unioned with default `/lib`, `/usr/lib`, `/lib64`, `/usr/lib64`, resolving symlinks and deduplicating — same algorithm as `so_system_enum.sh` but independently computed (the two scripts don't communicate); this set is used solely as a filter to prevent duplicate markers, not as an enumeration target. **Drift warning — cross-script duplication:** this parse block is functionally identical to the one in `so_system_enum.sh`. Any change to the parse logic here MUST be mirrored in `so_system_enum.sh`. When building this script, wrap the parse block with a comment banner naming the sibling script and the parity requirement, so any future edit surfaces the coupling. Then run `readelf -d` against binaries in the standard-location set (`/usr/bin`, `/usr/sbin`, `/bin`, `/sbin`, `/usr/local/bin`, `/usr/local/sbin`, `/opt`); extract `RPATH` and `RUNPATH` entries from each ELF's dynamic section; exclude any entries whose resolved path is in the system-paths filter set; for each remaining path, test the directory itself for writable (emit `WRITABLE_SO_DIR[<binary>]: <dir>`) AND iterate `*.so*` files inside testing each for writable (emit `WRITABLE_SO_FILE[<binary>]: <path>` per hit). `<binary>` in the tag is the ELF the RPATH/RUNPATH was read from — one path may fire markers under multiple `<binary>` tags if multiple binaries share it. Statically-linked binaries and non-ELF files: `readelf -d` returns no dynamic section — skip silently. Symlink handling: resolve to real binary before `readelf` to avoid duplicate work on aliases.
+
+Once `~/scripts/so_rpath_enum.sh` exists, invoke per the `Scheduled execution` pattern:
+
+On **attacker**:
+
+`(echo "bash <<'EOF'"; sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' ~/scripts/so_rpath_enum.sh; echo "EOF") | xclip -selection clipboard`
+
+(Wayland: substitute `wl-copy` for `xclip -selection clipboard`.)
+
+Paste into target shell.
+
+Route on output markers:
+
+- `WRITABLE_SO_FILE[<binary>]: <path>` → [[Shared Object Hijack]], RPATH/RUNPATH variant, consumer known (`<binary>`), use `<path>` as `<so_file>`
+- `WRITABLE_SO_DIR[<binary>]: <dir>` → [[Shared Object Hijack]], RPATH/RUNPATH variant, consumer known (`<binary>`), drop-new-file case, use `<dir>` as `<so_dir>`
+- `SO_RPATH_SCANNED` with no preceding `WRITABLE_SO_*[<binary>]` → check completed cleanly, no writable RPATH/RUNPATH targets. Continue to next sub-block.
+- No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
+
+### Interpreted-language library hijacking (default paths):
+
+⚠️ `[[Python Library Hijack]]` / `[[Ruby Library Hijack]]` / `[[Perl Library Hijack]]` walkthrough bodies — build-when-encountered. Walkthroughs are unified across both interpreted sub-blocks (default paths + per-script custom paths) and branch at top on marker tag. Shared structure across all three languages: (1) trigger: interpreter module loader (Python `import` / Ruby `require` / Perl `use`) at import resolves module against a search list; two exploitable primitives — writable directory on the list, OR writable module file at a resolved path; on load, top-level code executes as side-effect; (2) payload: top-level code invoking `/bin/bash -p` — Python: `import os; os.system("/bin/bash -p")`; Ruby / Perl: `system("/bin/bash -p")`; (3) deployment variants gated by marker's FILE/DIR half: overwrite-with-backup (`WRITABLE_*_LIB_FILE`, sticky-safe, preserves inode), rename-swap (`WRITABLE_*_LIB_DIR`, breaks under sticky bit), unlink-and-replace (`WRITABLE_*_LIB_DIR`, destructive fallback); (4) consumer-identification branches on marker tag — untagged marker (from this sub-block) → walkthrough must identify a root-run script that imports the target module (cron entries pointing at `.py`/`.rb`/`.pl`, systemd `ExecStart=/usr/bin/<interp> <script>`, sudo NOPASSWD interpreted scripts — walkthrough author to detail); tagged marker `WRITABLE_<LANG>_LIB_*[<script>]` (from per-script custom-paths sub-block) → consumer is `<script>` from tag, skip identification; (5) triggering the load — deployment stages the module but does not fire it; the consumer script must be invoked in a root context after deployment for the payload to run. Options by consumer class: cron / systemd timer script → wait for next scheduled invocation; running systemd service → wait for natural restart or reboot; sudo NOPASSWD interpreted script → `sudo <interp> <script>` (or `sudo <script>` if directly executable) fires the load in root context. **Foothold-user direct invocation triggers the payload but runs as foothold uid — no root escalation.** Root-context invocation is mandatory; (6) per-language quirks: Python — `.pyc` cache regeneration in `__pycache__/`; `sys.path` order (script dir → `PYTHONPATH` → site-packages). Ruby — `$LOAD_PATH` order; gem vs loose module distinction. Perl — `@INC` order; `.pm` naming conventions.
+
+⚠️ **Build-when-encountered.** `~/scripts/interpreter_default_lib_enum.sh` is deferred — no script body exists yet. On first real-box encounter: build the script from first principles against the live target (canonical validation context), conforming to the marker contract below. Marker contract is the locked architectural shape only — specific marker names and field structure may refine when the script is written against real interpreter output. Enum scope for this scaffold: for each language whose interpreter is present (`command -v python3` / `ruby` / `perl` — extensible to node/lua/php-cli if encountered), retrieve default module search paths via runtime introspection with no script context (`python3 -c 'import sys; print("\n".join(sys.path))'` / `ruby -e 'puts $LOAD_PATH'` / `perl -e 'print join("\n",@INC)'`); resolve symlinks and deduplicate by resolved path; for each unique directory, independently test the directory itself for writability (emit `WRITABLE_<LANG>_LIB_DIR: <dir>`) AND iterate module files inside testing each for writability (Python `*.py`; Ruby `*.rb`; Perl `*.pm`; emit `WRITABLE_<LANG>_LIB_FILE: <path>` per hit). FILE and DIR checks are independent. Markers are intentionally untagged — consumer-script identification is not performed by this enum, parallel to the SO system-paths sub-block and for the same reason: tagging would require inspecting candidate consumer scripts per finding, adding file-read noise this near-silent sub-block is designed to avoid; the walkthrough handles consumer identification per-marker. **Drift warning — cross-script duplication:** the default-paths introspection commands (Python `sys.path`, Ruby `$LOAD_PATH`, Perl `@INC` via runtime introspection with no script context) are duplicated in `interpreter_custom_lib_enum.sh` where they build a filter set. Any change to the introspection logic here MUST be mirrored in `interpreter_custom_lib_enum.sh`. When building this script, wrap the introspection block with a comment banner naming the sibling script and the parity requirement, so any future edit surfaces the coupling.
+
+Once `~/scripts/interpreter_default_lib_enum.sh` exists, invoke per the `Scheduled execution` pattern:
+
+On **attacker**:
+
+`(echo "bash <<'EOF'"; sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' ~/scripts/interpreter_default_lib_enum.sh; echo "EOF") | xclip -selection clipboard`
+
+(Wayland: substitute `wl-copy` for `xclip -selection clipboard`.)
+
+Paste into target shell.
+
+Route on output markers:
+
+- `WRITABLE_PYTHON_LIB_FILE: <path>` → [[Python Library Hijack]], default-paths variant, use `<path>` as `<lib_file>`
+- `WRITABLE_PYTHON_LIB_DIR: <dir>` → [[Python Library Hijack]], default-paths variant, drop-new-file case, use `<dir>` as `<lib_dir>`
+- `WRITABLE_RUBY_LIB_FILE: <path>` → [[Ruby Library Hijack]], default-paths variant, use `<path>` as `<lib_file>`
+- `WRITABLE_RUBY_LIB_DIR: <dir>` → [[Ruby Library Hijack]], default-paths variant, drop-new-file case, use `<dir>` as `<lib_dir>`
+- `WRITABLE_PERL_LIB_FILE: <path>` → [[Perl Library Hijack]], default-paths variant, use `<path>` as `<lib_file>`
+- `WRITABLE_PERL_LIB_DIR: <dir>` → [[Perl Library Hijack]], default-paths variant, drop-new-file case, use `<dir>` as `<lib_dir>`
+- `INTERPRETED_LANG_DEFAULT_LIBS_SCANNED` with no preceding `WRITABLE_*_LIB_*` → check completed cleanly, no writable interpreted-language default-path library targets. Continue to next sub-block.
+- No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
+
+### Interpreted-language library hijacking (per-script custom paths):
+
+⚠️ Routes to `[[Python Library Hijack]]` / `[[Ruby Library Hijack]]` / `[[Perl Library Hijack]]` (same walkthroughs as default-paths sub-block above); tagged markers `WRITABLE_<LANG>_LIB_*[<script>]` carry the consumer script in the tag, so the walkthroughs skip their consumer-identification step for these.
+
+⚠️ **Build-when-encountered.** `~/scripts/interpreter_custom_lib_enum.sh` is deferred — no script body exists yet. On first real-box encounter: build the script from first principles against the live target (canonical validation context), conforming to the marker contract below. Marker contract is the locked architectural shape only — specific marker names and field structure may refine when the script is written against real target inputs. Enum scope for this scaffold:
+1. Enumerate candidate consumer scripts from multiple sources — root's cron entries (`crontab -l -u root`, `/etc/crontab`, `/etc/cron.{d,hourly,daily,weekly,monthly}/*`); systemd units with interpreted `ExecStart=` (`/etc/systemd/system/*.service`, `/lib/systemd/system/*.service`); sudoers NOPASSWD entries pointing at interpreted scripts (`sudo -l 2>/dev/null`); init.d scripts with interpreter shebangs (`/etc/init.d/*`).
+2. For each candidate consumer script, identify the language from shebang or interpreter invocation. Inspect the script body for custom path modifications: Python — `sys.path.append(...)` / `sys.path.insert(...)`; Ruby — `$LOAD_PATH.unshift(...)` / `$LOAD_PATH.push(...)`; Perl — `use lib '<path>'` / `push @INC, '<path>'` / `unshift @INC, '<path>'`. Extract path arguments.
+3. Inspect the invocation environment for env-driven paths: Python `PYTHONPATH`, Ruby `RUBYLIB`, Perl `PERL5LIB` (colon-separated). Extract paths.
+4. Independently build the default-paths set for each language (same introspection as `interpreter_default_lib_enum.sh` — see drift warning below); union of extracted per-script + env-driven paths, filter out any already in the language's default-paths set (avoid duplicate markers with default-paths sub-block).
+5. For each remaining path, test the directory itself for writability (emit `WRITABLE_<LANG>_LIB_DIR[<script>]: <dir>`) AND iterate module files inside (`*.py` / `*.rb` / `*.pm`) testing each for writability (emit `WRITABLE_<LANG>_LIB_FILE[<script>]: <path>` per hit). `<script>` in the tag is the consumer script from step 1 — one path may fire markers under multiple `<script>` tags if multiple scripts reference the same custom path.
+
+**Drift warning — cross-script duplication:** the default-paths introspection block (Python `sys.path`, Ruby `$LOAD_PATH`, Perl `@INC`) is functionally identical to the one in `interpreter_default_lib_enum.sh`. Any change to the introspection logic here MUST be mirrored in `interpreter_default_lib_enum.sh`. When building this script, wrap the introspection block with a comment banner naming the sibling script and the parity requirement, so any future edit surfaces the coupling.
+
+Once `~/scripts/interpreter_custom_lib_enum.sh` exists, invoke per the `Scheduled execution` pattern:
+
+On **attacker**:
+
+`(echo "bash <<'EOF'"; sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' ~/scripts/interpreter_custom_lib_enum.sh; echo "EOF") | xclip -selection clipboard`
+
+(Wayland: substitute `wl-copy` for `xclip -selection clipboard`.)
+
+Paste into target shell.
+
+Route on output markers:
+
+- `WRITABLE_PYTHON_LIB_FILE[<script>]: <path>` → [[Python Library Hijack]], per-script custom-paths variant, consumer known (`<script>`), use `<path>` as `<lib_file>`
+- `WRITABLE_PYTHON_LIB_DIR[<script>]: <dir>` → [[Python Library Hijack]], per-script custom-paths variant, consumer known (`<script>`), drop-new-file case, use `<dir>` as `<lib_dir>`
+- `WRITABLE_RUBY_LIB_FILE[<script>]: <path>` → [[Ruby Library Hijack]], per-script custom-paths variant, consumer known (`<script>`), use `<path>` as `<lib_file>`
+- `WRITABLE_RUBY_LIB_DIR[<script>]: <dir>` → [[Ruby Library Hijack]], per-script custom-paths variant, consumer known (`<script>`), drop-new-file case, use `<dir>` as `<lib_dir>`
+- `WRITABLE_PERL_LIB_FILE[<script>]: <path>` → [[Perl Library Hijack]], per-script custom-paths variant, consumer known (`<script>`), use `<path>` as `<lib_file>`
+- `WRITABLE_PERL_LIB_DIR[<script>]: <dir>` → [[Perl Library Hijack]], per-script custom-paths variant, consumer known (`<script>`), drop-new-file case, use `<dir>` as `<lib_dir>`
+- `INTERPRETED_LANG_CUSTOM_LIBS_SCANNED` with no preceding `WRITABLE_*_LIB_*[<script>]` → check completed cleanly, no writable interpreted-language custom-path library targets. Continue to next sub-block.
+- No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
+
+### Dynamic linker configuration hijacking:
+
+⚠️ `[[Dynamic Linker Configuration Hijack]]` walkthrough body — build-when-encountered. Points to include: (1) trigger mechanism is two-stage: (a) `ld.so` reads `/etc/ld.so.cache`, NOT the config files directly — a config file change has no effect until `ldconfig` is (re)invoked to rebuild the cache from `/etc/ld.so.conf` + `/etc/ld.so.conf.d/*.conf`, incorporating any newly-added attacker path; (b) at binary start `ld.so` looks up each linked library name in the (now-updated) cache — a root-run binary must subsequently start and its dynamic linking must resolve a library name to the attacker `.so`; both stages must occur post-deployment for the payload to fire (force-fire options for each stage: see point 5); (2) attack shape (writable file): append attacker-controlled directory path to existing file (overwrite-with-backup for restoration); (3) attack shape (writable dir): drop new `.conf` under `/etc/ld.so.conf.d/` naming attacker-controlled directory (cleanup: `rm` the file); (4) payload: malicious `.so` in the attacker-controlled directory, matching name of a legitimately-loaded library on a root-run binary — same construction as `[[Shared Object Hijack]]`; (5) triggering the load — deployment stages the linker-config change and the `.so`, but does not fire either stage; stage (a) `ldconfig` invocation: wait for package install / boot / cron-triggered `ldconfig`, or invoke directly via `sudo ldconfig` if a sudo entry allows; stage (b) consumer load: identify a candidate root-run consumer whose loaded library names include the attacker `.so` name via `ldd` against root-owned processes and known service binaries (walkthrough author to detail); once identified, options by consumer class: scheduler-invoked → wait for next scheduled fire; running service → wait for natural restart or reboot; sudo NOPASSWD → `sudo <consumer>` fires the load in root context; always-on daemon with no scheduled restart → typically requires reboot. **Foothold-user direct invocation of the consumer triggers the load but runs as foothold uid — no root escalation.** Root-context invocation is mandatory for stage (b); (6) IOC: on-disk artefact under `/etc/`; `ldconfig` invocation may be logged by package management or auditd.
+
+On **target:**
+
+`test -w /etc/ld.so.conf && echo "WRITABLE_LDCONFIG_FILE: /etc/ld.so.conf"; test -w /etc/ld.so.conf.d && echo "WRITABLE_LDCONFIG_DIR: /etc/ld.so.conf.d"; for f in /etc/ld.so.conf.d/*.conf; do [ -f "$f" ] && test -w "$f" && echo "WRITABLE_LDCONFIG_FILE: $f"; done; echo "LDCONFIG_SCANNED"`
+
+Route on output markers:
+
+- `WRITABLE_LDCONFIG_FILE: <path>` → [[Dynamic Linker Configuration Hijack]], use `<path>` as `<conf_file>`
+- `WRITABLE_LDCONFIG_DIR: <dir>` → [[Dynamic Linker Configuration Hijack]], drop-new-file case, use `<dir>` as `<conf_dir>`
+- `LDCONFIG_SCANNED` with no preceding `WRITABLE_LDCONFIG_*` → check completed cleanly, no writable linker config targets. Continue to next section.
+- No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
+
+### No route:
+
+No markers from any sub-block → no loader-hijacking PrivEsc route, proceed to Step 13
 
 ---
 
