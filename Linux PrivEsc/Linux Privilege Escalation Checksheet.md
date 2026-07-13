@@ -64,6 +64,26 @@ When prompted for password, hit Enter (blank).
 
 ## Step 3 — Sensitive file permissions
 
+### Writable /etc/:
+
+⚠️ **Scope: exploits enabled solely BY writable `/etc/` itself.** Vector is the containing-directory write primitive (unlink/rename/create against files directly under `/etc/`). File-axis writable checks on individual `/etc/` files (writable `/etc/shadow`, writable `/etc/ld.so.preload`, writable `/etc/sudoers.d/*`, etc.) live in their own steps and sub-blocks — do NOT extend this sub-block. `/etc/` subdirectories (`sudoers.d/`, `cron.d/`, `ld.so.conf.d/`, `init.d/`, `rc*.d/`, `dbus-1/`, `systemd/`) each have their own dir-axis checks in their respective home steps — do NOT extend this sub-block. Umbrella covers exclusively files directly under `/etc/`.
+
+⚠️ `[[Exploit Shadow via Writable /etc]]` / `[[Exploit Passwd via Writable /etc]]` / `[[Exploit ld.so.preload via Writable /etc]]` walkthrough bodies — build-when-encountered. Shared structure across all three: (1) trigger primitive: `/etc/` directory writable for foothold user, enabling unlink/rename/create against directly-contained files; (2) preflight sticky check: `ls -ld /etc` — if perm string shows `t` bit, foothold user cannot unlink or rename root-owned files inside `/etc/` (sticky restricts these to file-owner + dir-owner + root). Sticky `/etc/` narrows viable chains to create-new-when-absent only; sticky-blocked chains abandon at preflight; (3) deployment variants gated by target-file existence + sticky state — file present + not sticky → rename-swap (`mv /etc/<file> /etc/.<file>.bak`, drop attacker replacement); file present + sticky → chain blocked; file absent → create-new (writable `/etc/` allows this — creation is a valid deployment primitive even when the target file was absent originally, sticky-safe); (4) each walkthrough MUST handle both file-present and file-absent cases — do NOT abandon a chain because the target file is not there; the walkthrough creates it; (5) ownership tell: newly-created or renamed replacement files inherit foothold-user ownership (`ls -l` shows foothold uid, not `root`). Each walkthrough MUST include ownership-restore as first root action from the elevated shell (`chown root:<group> <file>` matching original ownership) to reduce IOC before further post-exploit work; (6) IOC: on-disk artefacts under `/etc/` (renamed backup files, newly-created attacker files); auditd (if enabled) captures the write; operator reverses before departure; (7) per-file specifics: **Shadow** — replacement contains attacker root hash (`openssl passwd -6` on attacker); trigger via `su -`; hash-gen + su-elevation construction identical to `[[Writable Shadow]]`, only the deployment primitive differs (rename-swap instead of in-place sed); **Passwd** — replacement adds UID-0 attacker user entry (or overwrites root entry with attacker-known hash); trigger via `su <name>`; entry construction identical to `[[Writable Passwd]]`, only the deployment primitive differs; **ld.so.preload** — file typically absent by default; create-new sticky-safe is the dominant case; payload construction and self-cleaning constructor discipline identical to `[[Dynamic Linker Preload Hijack]]` (Step 12 Sub-block 2) — reuse that walkthrough's payload guidance verbatim, only the deployment primitive differs.
+
+On **target:**
+
+`test -w /etc && { echo "WRITABLE_ETC_SHADOW"; echo "WRITABLE_ETC_PASSWD"; echo "WRITABLE_ETC_LDPRELOAD"; }; echo "ETC_SCANNED"`
+
+Route on output markers:
+
+- `WRITABLE_ETC_SHADOW` → [[Exploit Shadow via Writable /etc]]
+- `WRITABLE_ETC_PASSWD` → [[Exploit Passwd via Writable /etc]]
+- `WRITABLE_ETC_LDPRELOAD` → [[Exploit ld.so.preload via Writable /etc]]
+- `ETC_SCANNED` with no preceding `WRITABLE_ETC_*` → check completed cleanly, `/etc/` not writable. Continue to next sub-block.
+- No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
+
+---
+
 ### /etc/shadow & /etc/passwd:
 
 `test -r /etc/shadow && echo "SHADOW READABLE" || echo "SHADOW NOT READABLE"`
