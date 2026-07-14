@@ -26,6 +26,23 @@ When prompted for password, hit Enter (blank).
 - `env_keep` includes `LD_PRELOAD` OR `LD_LIBRARY_PATH` → [[Sudo Environment Variables]]
 - Nothing usable → proceed
 
+### Writable sudoers policy:
+
+⚠️ **Scope: file-axis only.** V_S dual-axis default carved out here — sudo validates each parsed file's owner (must be root) and mode (S_IWGRP/S_IWOTH silently skipped on parse). Foothold-owned files dropped into a writable `/etc/sudoers.d/` are rejected on parse; dir-write alone does NOT grant the primitive. File-axis via `test -w` catches the realistic vector (ACL-write on 0440 root:root file — base mode passes sudo's check, ACL grants foothold write).
+
+⚠️ `[[Writable Sudoers]]` walkthrough body — build-when-encountered. Points to include: (1) sudo's parse validation — owner must be root, mode with S_IWGRP or S_IWOTH silently skipped with warning to stderr; (2) preflight `stat -c '%U:%G %a' <policy>` — abandon if owner != root OR mode has group/world write (sudo will parse-reject; chmod rescue is dead — non-owner cannot chmod, foothold-owned files fail sudo's owner check regardless of mode); (3) primary real vector is ACL-write on 0440 root:root file (`test -w` fires while stat mode alone shows 0440 — `getfacl` confirms user ACL entry); (4) payload = `<user> ALL=(ALL) NOPASSWD:ALL` appended, invoke `sudo -i`; (5) sudoers vs sudoers.d bounded fork on `<policy>` path only — single walkthrough covers both.
+
+On **target:**
+
+`test -w /etc/sudoers 2>/dev/null && echo "WRITABLE_SUDOERS: /etc/sudoers"; for f in /etc/sudoers.d/*; do [ -f "$f" ] || continue; test -w "$f" 2>/dev/null && echo "WRITABLE_SUDOERS_D: $f"; done; echo "SUDOERS_SCANNED"`
+
+Route on output markers:
+
+- `WRITABLE_SUDOERS: /etc/sudoers` → [[Writable Sudoers]], use `/etc/sudoers` as `<policy>`
+- `WRITABLE_SUDOERS_D: <path>` → [[Writable Sudoers]], use `<path>` as `<policy>`
+- `SUDOERS_SCANNED` with no preceding `WRITABLE_*` → check completed cleanly, no writable sudoers policy. Continue to next sub-block.
+- No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
+
 ### Groups:
 
 `id`
