@@ -103,16 +103,22 @@ Route on output markers:
 
 ---
 
-### /etc/shadow & /etc/passwd:
+### Local account database:
 
 `test -r /etc/shadow && echo "SHADOW READABLE" || echo "SHADOW NOT READABLE"`
 `test -w /etc/passwd && echo "PASSWD WRITABLE" || echo "PASSWD NOT WRITABLE"`
 `test -w /etc/shadow && echo "SHADOW WRITABLE" || echo "SHADOW NOT WRITABLE"` 
+`test -w /etc/group && echo "GROUP WRITABLE" || echo "GROUP NOT WRITABLE"`
+`test -r /etc/gshadow && echo "GSHADOW READABLE" || echo "GSHADOW NOT READABLE"`
+`test -w /etc/gshadow && echo "GSHADOW WRITABLE" || echo "GSHADOW NOT WRITABLE"`
 
 - `SHADOW READABLE` → [[Readable Shadow]]
 - `PASSWD WRITABLE` → [[Writable Passwd]]
 - `SHADOW WRITABLE` → [[Writable Shadow]]
-- All three `NOT` → proceed
+- `GROUP WRITABLE` → [[Writable Group]]
+- `GSHADOW READABLE` → [[Readable Gshadow]]
+- `GSHADOW WRITABLE` → [[Writable Gshadow]]
+- All six `NOT` → proceed
 
 ---
 
