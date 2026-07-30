@@ -332,7 +332,35 @@ No markers from any sub-block → no D-Bus hijacking PrivEsc route, proceed to S
 
 ---
 
-## Step 9 — Root-owned services
+## Step 9 — AF_UNIX Socket Hijacking
+
+⚠️ **Scope:** writable AF_UNIX domain sockets owned by non-foothold users. Foothold-owned sockets (own tmux, session-bus) excluded as self-comms. Docker/LXD sockets at standard paths are canonically enumerated at Step 2 (Container attack surface); this step backstops path variance and covers all other writable AF_UNIX socket exposures. Systemd `.socket` unit files are Step 6's home (different vector class — file-write triggering init, not IPC over the socket). Enumeration is bounded to `/var/run /run /tmp /var/lib /var/snap`.
+
+⚠️ **Check identifies path-matched daemons; walkthroughs verify identity + UID before exploit.** The check dispatches by socket path pattern to known-exploitable-daemon walkthroughs. Path-based daemon identity is packaging convention — strong for standard packages, weakens for custom setups. Each walkthrough independently confirms daemon identity (banner probe) AND daemon UID (`/proc/<pid>/status` where readable + socket file owner as `bind()` fsuid proxy + behavioural probe as fallback) as preflight before executing the exploit chain — do NOT skip walkthrough preflight; the check identifies candidates by path, not confirmed exploits. Socket file owner is a ~95% reliable heuristic for daemon UID via `bind()` fsuid semantics; systemd socket activation is the residual break case (systemd binds as root, hands FD to service-user daemon). Both re-verified per socket in each walkthrough before the chain fires.
+
+⚠️ **`[unknown]` bucket is speculative and dual-purpose.** The [[Unknown Daemon Socket Abuse]] walkthrough performs the same preflight discipline as the named-daemon walkthroughs (identity confirmation + UID verification per warning above), then attempts generic exploitation primitive families (arbitrary file-write, command execution, plugin/module load, config reload) against the unidentified daemon — no canonical chain, no guaranteed yield. Success is speculative. The walkthrough also carries a secondary refinement responsibility: if the identified daemon is reasonably reusable across future engagements (common upstream package, plausible re-encounter), on root canonicalise it (add path pattern to allowlist in `~/scripts/af_unix_sock_enum.sh` + build dedicated `[[<Daemon> Socket Abuse]]` walkthrough), on INAPPLICABLE-because-legit-by-design add path pattern to blacklist. Genuine one-offs (target-specific custom daemon that won't recur) don't earn canonicalisation — judgment call, not automatic. When canonicalisation IS earned, the check's precision compounds over vault lifetime.
+
+On **attacker**:
+
+`(echo "bash <<'EOF'"; sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' ~/scripts/af_unix_sock_enum.sh; echo "EOF") | xclip -selection clipboard`
+
+(Wayland: substitute `wl-copy` for `xclip -selection clipboard`.)
+
+Paste into **target** shell.
+
+Route on output markers:
+
+- `WRITABLE_AF_UNIX_SOCK[docker]: <path>` → [[Docker Socket Abuse]], use `<path>` as `<socket>`
+- `WRITABLE_AF_UNIX_SOCK[lxd]: <path>` → [[LXD Socket Abuse]], use `<path>` as `<socket>`
+- `WRITABLE_AF_UNIX_SOCK[redis]: <path>` → [[Redis Socket Abuse]], use `<path>` as `<socket>`
+- `WRITABLE_AF_UNIX_SOCK[memcached]: <path>` → no canonical chain, protocol has no code-execution primitive, take next marker
+- `WRITABLE_AF_UNIX_SOCK[unknown]: <path>` → [[Unknown Daemon Socket Abuse]], use `<path>` as `<socket>`
+- `AF_UNIX_SOCK_SCANNED` with no preceding `WRITABLE_AF_UNIX_SOCK[*]` markers → no writable AF_UNIX sockets, proceed to Step 10
+- All markers exhausted with no elevation → proceed to Step 10
+- No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
+---
+
+## Step 10 — Root-owned services
 
 `ps -ef | awk '$1=="root" && $8 !~ /^\[/'`
 
@@ -347,7 +375,7 @@ No markers from any sub-block → no D-Bus hijacking PrivEsc route, proceed to S
 
 ---
 
-## Step 10 — NFS exports
+## Step 11 — NFS exports
 
 `cat /etc/exports 2>/dev/null`
 
@@ -356,7 +384,7 @@ No markers from any sub-block → no D-Bus hijacking PrivEsc route, proceed to S
 
 ---
 
-## Step 11 — PATH abuse
+## Step 12 — PATH abuse
 
 `echo $PATH; for d in $(echo $PATH | tr ':' ' '); do test -w "$d" && echo "WRITABLE: $d"; done`
 
@@ -365,7 +393,7 @@ No markers from any sub-block → no D-Bus hijacking PrivEsc route, proceed to S
 
 ---
 
-## Step 12 — Loader hijacking
+## Step 13 — Loader hijacking
 
 ### Dynamic linker configuration hijacking:
 
@@ -513,11 +541,11 @@ Route on output markers:
 
 ### No route:
 
-No markers from any sub-block → no loader-hijacking PrivEsc route, proceed to Step 13
+No markers from any sub-block → no loader-hijacking PrivEsc route, proceed to Step 14
 
 ---
 
-## Step 13 — Capabilities
+## Step 14 — Capabilities
 
 `getcap -r / 2>/dev/null`
 
@@ -530,13 +558,13 @@ No markers from any sub-block → no loader-hijacking PrivEsc route, proceed to 
 
 ---
 
-## Step 14 — SUID / SGID binaries
+## Step 15 — SUID / SGID binaries
 
 ⚠️ High IOC. Full filesystem traversal — run once; the technique walkthroughs reuse this output, they do not re-run the `find`.
 
 `find / -type f \( -perm -4000 -o -perm -2000 \) -exec ls -l {} + 2>/dev/null`
 
-(No output → proceed to Step 15)
+(No output → proceed to Step 16)
 
 Try the below technique walkthroughs in stealth-first order. Each receives this list (the output from the above command), self-selects the binaries it applies to, loops them, and returns here on exhaustion to try the next:
 
@@ -546,13 +574,13 @@ Try the below technique walkthroughs in stealth-first order. Each receives this 
 4. [[SUID Function Export Hijack]]
 5. [[SUID PS4 Debug Trace]]
 
-All five exhausted with no elevation → proceed to Step 15.
+All five exhausted with no elevation → proceed to Step 16.
 
 ---
 
-## Step 15 — Kernel exploits
+## Step 16 — Kernel exploits
 
-⚠️ Kernel exploits risk kernel panics — box may need reset. Run only after Steps 0–14 fall through.
+⚠️ Kernel exploits risk kernel panics — box may need reset. Run only after Steps 0–15 fall through.
 
 `uname -r`
 
@@ -567,7 +595,7 @@ From the populated files, identify and record `<distro>` (e.g. Debian, Ubuntu, R
 
 ---
 
-## Step 16 — Automated enumeration (linpeas)
+## Step 17 — Automated enumeration (linpeas)
 
 ⚠️ Maximum IOC. Comprehensive backstop.
 
@@ -597,7 +625,7 @@ Focus on red+yellow flagged findings. Route each finding back to the appropriate
 
 ## Exhaustion
 
-All seventeen steps fall through:
+All eighteen steps fall through:
 
 1. Re-review `linpeas.out` for less-common findings (kernel keyring, polkit, dbus, custom services).
 2. Deeper enum on app-specific artefacts: `/var/spool/`, `/var/backups/`, `/opt/`, `/srv/`.
