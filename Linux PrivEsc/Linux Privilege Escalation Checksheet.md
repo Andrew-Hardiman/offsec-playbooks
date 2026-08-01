@@ -364,7 +364,7 @@ Route on output markers:
 
 `ps -ef | awk '$1=="root" && $8 !~ /^\[/'`
 
-- `mysqld` running as root → [[MySQL UDF]]
+- `mysqld` running as root → [[MySQL UDF]]  (DOES THIS COVER MARIADB ALSO???)
 - `postgres` running as root → [[Postgres UDF]]
 - `redis-server` running as root → [[Redis Configuration File Write]]
 - `org.apache.catalina.startup.Bootstrap` in cmdline args, running as root → [[Tomcat Manager WAR Deploy]]

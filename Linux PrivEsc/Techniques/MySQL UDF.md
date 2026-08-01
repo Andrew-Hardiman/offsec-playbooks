@@ -16,22 +16,31 @@ All preconditions verified before any action. Any failure → STOP, walkthrough 
 
 ### MySQL access and privileges
 
-Connect (primary, credentials known, local target):
+⚠️ Local target assumed; append `-h <host>` to any command below for remote.
+
+**Credentials known**:
 
 `mysql -u <user> -p<password>`
 
-Remote target: append `-h <host>`.
+**No credentials** — try in order until one connects with sufficient grants (verified via `SHOW GRANTS FOR CURRENT_USER;` below):
 
-Fallback (unauthenticated MySQL root):
+1. `mysql -u root` — reads `~/.my.cnf` / `~/.mylogin.cnf` for root creds; falls through to empty password if neither present.
+2. `mysql -u root --password=` — empty-password root / `--skip-grant-tables` mode.
+3. `mysql -u "$(id -un)" --password=` — `auth_socket` plugin match on foothold OS user (local only — auth_socket requires UNIX socket).
+4. `mysql -u nonexistent_probe --password=` — anonymous account (`''@'localhost'`). Probe username (`nonexistent_probe`) forces server-side wildcard fallthrough; mysql client substitutes empty `-u ''` with OS username so a probe is required.
 
-`mysql -u root`
+* returns `ERROR ... Access denied` → try next entry in the chain above; chain exhausted → walkthrough doesn't apply unless credentials harvested.
+* `mysql>` prompt appears → run verify-privileges below.
 
-Verify privileges:
+**Verify privileges**:
 
 `SHOW GRANTS FOR CURRENT_USER;`
 
-- Output contains `ALL PRIVILEGES ON *.*` OR explicit `FILE` and `SUPER` → proceed.
-- Missing → walkthrough doesn't apply.
+* Output contains any of the follow three → proceed:
+  - `ALL PRIVILEGES ON *.*`, OR
+  - `FILE` + `INSERT ON *.*`, OR
+  - `FILE` + `INSERT ON mysql.*`.
+* Missing → `exit;` and try next entry in the chain above; chain exhausted → walkthrough doesn't apply unless credentials harvested.
 
 ### MySQL-side environment
 
