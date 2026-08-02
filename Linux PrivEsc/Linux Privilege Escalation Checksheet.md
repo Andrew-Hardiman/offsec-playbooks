@@ -183,6 +183,8 @@ No markers from either block → no scheduled-execution PrivEsc route, proceed t
 
 ⚠️ **Build-when-encountered.** `~/scripts/systemd_enum.sh` is deferred — no script body exists yet. On first real-box encounter of this step: build the script from first principles against the live target (which is the canonical validation context), conforming to the marker contract below. The marker contract is the locked architectural shape only — specific marker names and field structure are likely to refine when the script is built against real systemd output. 
 
+⚠️ **Build-time considerations for `systemd_enum.sh` marker breadth.** (a) `[root]` tag on file-based markers may over-filter — writable `.service` files not owned by root or currently configured `User=` non-root are still exploitable by flipping `User=root` + attacker `ExecStart`; trigger via boot / admin `daemon-reload` / socket-activation. Revisit at build. (b) Add `WRITABLE_SYSTEMD_UNIT_DIR: <dir>` marker for foothold-writable systemd config directories (`/etc/systemd/system/`, drop-in dirs) enabling drop-new-`.service` vector. Distinct from `WRITABLE_SYSTEMD_PATH_DIR` (execution-PATH env hijack, sibling of Cron PATH).
+
 Once `~/scripts/systemd_enum.sh` exists, invoke per the `Scheduled execution` pattern:
 
 On **attacker**: 
@@ -361,6 +363,8 @@ Route on output markers:
 ---
 
 ## Step 10 — Root-owned services
+
+⚠️ The enumeration command given below (`ps -ef.....`) will be sufficient on the majority of OSCP+/CTF/THM lab targets and typical engagement baselines. However, should this probe return completely empty on a target where root-runnable services are known-installed (e.g. mysql package present, no mysqld visible), OR if linpeas / other tool / any enumeration technique surfaces a root-runnable service that this probe missed (e.g. a systemd `ProtectProc=` hardened unit, or a socket-activated daemon idle at scan time), consult [[Root-owned Services Secondary Detection]] and build out its deferred pieces
 
 `ps -ef | awk '$1=="root" && $8 !~ /^\[/'`
 

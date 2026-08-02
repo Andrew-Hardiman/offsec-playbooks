@@ -1,7 +1,7 @@
 
 ⚠️ **Hard preconditions — verified in Step 1 before any action.**
 
-- **Authenticated MySQL user holds FILE + UDF registration privileges**. `ALL PRIVILEGES` or `SUPER` covers both.
+- **Authenticated MySQL user holds FILE + UDF registration privileges**. `ALL PRIVILEGES` or `FILE` + `INSERT` covers both.
 - **MySQL version is 4.x, 5.x, or MariaDB**. EDB-ID 1518 targets this range; MySQL 8.0+ requires `lib_mysqludf_sys` (sibling walkthrough — not yet built).
 - **No `secure_file_priv` restriction** blocking DUMPFILE to the plugin directory.
 - **mysqld process runs as OS root** (NOT `mysql` / `mariadb` / other service account). Without this, the exploit installs and runs but yields a shell as the service account, not root.
@@ -78,8 +78,7 @@ Exit `mysql` back to shell.
 
 - UID column = `root` AND `--user=root` in mysqld argv → proceed.
 - UID column = `mysql` / `mariadb` / other → STOP/EXIT WALKTHROUGH. Exploit yields shell as that user, not root.
-
-If remote-only access (no target shell), defer this check to Step 4 via `do_system('id')` and accept the wasted-work risk.
+- No mysqld process line (only the ps header returned) → ps blind to mysqld (hidepid on procfs, `ProtectProc=` on the unit, socket-activated-idle daemon, remote-only access with no target shell, or another failure mode) → proceed anyway; defer UID check to Step 4 via `do_system('id')` and accept the wasted-work risk.
 
 #### Target architecture:
 
