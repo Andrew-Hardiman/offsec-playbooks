@@ -24,9 +24,9 @@ Route on output in priority order below. Stop when root achieved.
 - `SSH_PEM_OUTLIER: <file> [encrypted] [<fp>]` → readable, passphrase-protected private key. → **Private key handler — encrypted**.
 - `SSH_CONFIG: <file>` → SSH client config present; indented non-comment lines follow. → **Config handler**.
 - `SSH_AGENT_PRESENT: <sock>` or `SSH_AGENT_ENV: <sock>` → agent observable but not writable. Note socket path; revisit post-root.
-- `SSH_AUTHKEYS: <file>` → indented authorized public keys follow. Informational — note which principals have trusted keys for this account.
+- `SSH_AUTHKEYS: <file>` → indented authorized public keys follow. → **Public key handler — Debian PRNG lookup** (Step 2, stub — build deferred; see design note). Informational fallback — note which principals have trusted keys for this account.
+- `SSH_PUBKEY: <file>` → standalone public key. → **Public key handler — Debian PRNG lookup** (Step 2, stub — build deferred; see design note). Informational fallback if handler unbuilt.
 - `SSH_KNOWNHOSTS: <file>` → indented hostnames follow. Note as lateral pivot leads.
-- `SSH_PUBKEY: <file>` → standalone public key. Informational only.
 - `SSH_DIR_DENIED` / `SSH_PRIVKEY_DENIED` / `SSH_AUTHKEYS_DENIED` / `SSH_CONFIG_DENIED` / `SSH_KNOWNHOSTS_DENIED` / `SSH_FILE_DENIED` → exists, foothold user cannot read. Log `<file>` path for post-root extraction.
 
 No `SSH_PRIVKEY`, `SSH_PEM_OUTLIER`, or `SSH_AGENT_HIJACKABLE` in output → targeted pass found **nothing** actionable. Accept noise cost and run wide pass (Step 1a, below), or return to [[Linux Privilege Escalation Checksheet]] `Credential Harvesting`.
@@ -76,7 +76,7 @@ Identify target `<user>` from `<file>` path:
 
 - `/etc/ssh/ssh_host_*_key` → server host-identity key, not user auth. **Skip.**
 - `/root/.ssh/` or `/etc/ssh/` → try `root` first.
-- `/home/<user>/.ssh/` → try `<user>` first, then `root`.
+- `/home/<user>/.ssh/` → try `root` first, then `<user>`.
 -  **OUTLIER** path → try `root` first, then all interactive users: `awk -F: '($3==0||$3>=1000)&&$7!~/(nologin|false)/{print $1}' /etc/passwd`
 
 Try from **target** first; if foothold too limited for interactive SSH or `Connection refused` → from **attacker**.
@@ -139,7 +139,7 @@ Identify target `<user>` from `<file>` path:
 
 - `/etc/ssh/ssh_host_*_key` → server host-identity key, not user auth. **Skip.**
 - `/root/.ssh/` or `/etc/ssh/` → try `root` first.
-- `/home/<user>/.ssh/` → try `<user>` first, then `root`.
+- `/home/<user>/.ssh/` → try `root` first, then `<user>`.
 - **OUTLIER** path → try `root` first, then all interactive users: `awk -F: '($3==0||$3>=1000)&&$7!~/(nologin|false)/{print $1}' /etc/passwd`
 
 Try from **target** first; if foothold too limited for interactive SSH or `Connection refused` → from **attacker**.
@@ -167,6 +167,13 @@ Try from **target** first; if foothold too limited for interactive SSH or `Conne
 - `Too many authentication failures` → `ssh -o IdentitiesOnly=yes -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa -i /tmp/key.pem <user>@<target>`
 - All users exhausted → next key.
 
+
+---
+### Public key handler — Debian PRNG lookup
+
+⚠️ **Handler stub — build deferred.** When an `SSH_AUTHKEYS` pubkey or `SSH_PUBKEY` marker fires, consult [[SSH Keys Debian PRNG Public Key Handler]] design note in `Design Notes/` folder and build out the handler body per the specification there. Design note captures: CVE-2008-0166 mechanism from primary sources; the keys-don't-move-on-upgrade principle that governs why the check must be per-key not per-box; sshd_config-aware target-user derivation logic; fingerprint→blacklist→recover→SSH-in chain; required `~/scripts/ssh_enum.sh` extensions (wide pubkey pass + sshd_config `AuthorizedKeysFile` parsing); required [[Attacker Toolchain]] two-part setup (openssl-blacklist detection layer + precomputed private-key recovery layer).
+
+---
 ### Config handler
 
 Inspect indented lines following `SSH_CONFIG: <file>`. Extract:

