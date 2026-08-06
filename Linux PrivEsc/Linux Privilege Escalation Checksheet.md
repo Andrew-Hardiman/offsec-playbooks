@@ -43,6 +43,20 @@ Route on output markers:
 - `SUDOERS_SCANNED` with no preceding `WRITABLE_*` → check completed cleanly, no writable sudoers policy. Continue to next sub-block.
 - No output at all → paste did not execute (terminal issue, syntax mangling, or connection drop). Retry.
 
+### Sudo token hijack:
+
+⚠️ `[[Sudo Token Hijack]]` walkthrough — build-when-encountered. Same-UID cached-token abuse via `gdb`/ptrace code injection into the user's shell process, riding a valid `/var/run/sudo/ts/<user>` (or `/var/db/sudo/ts/<user>`) timestamp created by the user's own recent legitimate sudo. Primary source: `nongiach/sudo_inject` (chaignc, 2019, EDB-46989). Metasploit module `exploit/linux/local/ptrace_sudo_token_priv_esc` (bcoles, 2019) covers the same primitive — ⚠️ MSF budget applies (one target across exam). Build must cover: (1) precondition triad — `ptrace_scope=0`, `gdb` on target, foothold user in sudoers, living same-UID process holding a valid cached token; (2) mechanism — `gdb` ptrace-attach to a same-UID interactive shell, inject `system("sudo -i")` (or `system("sudo <cmd>")`); sudo finds the cache bound to that PID/TTY and grants root without password; (3) token binding `(process start time + session id)` OR `(tty start time + tty session id)` — dead-process tokens cannot be stolen (unspoofable start time); (4) trigger is opportunistic — wait for legitimate user sudo to seed the cache. If foothold user has `sudo -l` NOPASSWD entries visible from the earlier `Sudo:` bullet, technique is redundant (use directly); (5) IOC — Elastic Security production rule "Potential Sudo Token Manipulation via Process Injection" fires on gdb → sudo uid-change chain; auditd `SYS_ptrace` catches attach; on-disk artefact = timestamp file mtime advance.
+
+On **target:**
+
+`cat /proc/sys/kernel/yama/ptrace_scope 2>/dev/null || echo "0"; command -v gdb >/dev/null 2>&1 && echo "GDB_PRESENT" || echo "GDB_ABSENT"; echo "TOKEN_HIJACK_SCANNED"`
+
+Route on output:
+
+- `0` AND `GDB_PRESENT` → [[Sudo Token Hijack]] (walkthrough not built; deferred to build-when-encountered — see stub notes above).
+- Value `1`, `2`, or `3` for ptrace_scope OR `GDB_ABSENT` → INAPPLICABLE, proceed to Groups.
+- `TOKEN_HIJACK_SCANNED` with no preceding ptrace_scope value → paste did not execute cleanly. Retry.
+
 ### Groups:
 
 `id`
@@ -124,14 +138,15 @@ Route on output markers:
 
 ## Step 4 — Credential Harvesting
 
-Read-only filesystem enum for credential-bearing artefacts. Stealth-positive — bash history of read commands is the only IOC.
+⚠️ Read-only filesystem enum for credential-bearing artefacts. Stealth-positive — bash history of read commands is the only IOC.
 
 1. [[History Files]]
 2. [[Config Files]]
 3. [[SSH Keys]]
-4. [[Process cmdline & environ]] — *stub; skip. Build canonically when first encountered in the wild — walkthrough + `~/scripts/proc_enum.sh` covering `/proc/*/cmdline` and `/proc/*/environ`, parallel to History Files / Config Files / SSH Keys.*
+4. [[Process cmdline & environ]] — *stub; skip. Build canonically when first encountered in the wild — walkthrough + `~/scripts/proc_argenv_enum.sh` covering `/proc/*/cmdline` and `/proc/*/environ`, parallel to History Files / Config Files / SSH Keys.*
+5. [[Process Memory Dumping]] — *stub; skip. Walkthrough not built — see [[Process Memory Dumping Walkthrough]] design note; deferred to build-when-encountered.*
 
-All four exhausted with no elevation → proceed to Step 5.
+All five exhausted with no elevation → proceed to Step 5.
 
 ---
 
@@ -342,6 +357,8 @@ No markers from any sub-block → no D-Bus hijacking PrivEsc route, proceed to S
 
 ⚠️ **`[unknown]` bucket is speculative and dual-purpose.** The [[Unknown Daemon Socket Abuse]] walkthrough performs the same preflight discipline as the named-daemon walkthroughs (identity confirmation + UID verification per warning above), then attempts generic exploitation primitive families (arbitrary file-write, command execution, plugin/module load, config reload) against the unidentified daemon — no canonical chain, no guaranteed yield. Success is speculative. The walkthrough also carries a secondary refinement responsibility: if the identified daemon is reasonably reusable across future engagements (common upstream package, plausible re-encounter), on root canonicalise it (add path pattern to allowlist in `~/scripts/af_unix_sock_enum.sh` + build dedicated `[[<Daemon> Socket Abuse]]` walkthrough), on INAPPLICABLE-because-legit-by-design add path pattern to blacklist. Genuine one-offs (target-specific custom daemon that won't recur) don't earn canonicalisation — judgment call, not automatic. When canonicalisation IS earned, the check's precision compounds over vault lifetime.
 
+⚠️ `[[Tmux Session Hijack]]` / `[[Screen Session Hijack]]` walkthroughs — build-when-encountered. Terminal multiplexer session takeover via writable server socket — foothold attaches to root-owned multiplexer session, lands shell in root context. Attach primitive: `tmux -S <socket> attach` / `screen -S <socket> -x`. Primary sources: `tmux(1)`, `screen(1)` man pages. Build must cover: (1) mechanism — modern tmux/screen check filesystem perms on the server socket at connect time; foothold with rw access to a root-owned socket lands a shell in the target's session context; (2) precondition — root ran multiplexer with `-S <custom_path>` (or `screen -U`/multiuser mode) resulting in a group-writable socket; default per-uid sockets (`/tmp/tmux-<uid>/`, `/run/screen/S-<user>/`) are per-uid-restricted and not the vector; (3) identity confirmation — verify socket is bound to a `tmux` or `screen` server process (`lsof -U <path>`, `ss -xnp | grep <path>`) before attaching; (4) attach + cleanup — attach with the primitive above, detach via prefix+`d` (tmux) / `Ctrl-a d` (screen) before exiting to avoid killing the session; (5) enum script update at build — `~/scripts/af_unix_sock_enum.sh` allowlist additions must use bound-process-comm signature (via `lsof -U` or peer lookup on the socket), not fixed path patterns, because attack vector is custom-`-S` paths, not defaults; (6) legacy CVE-track setuid/setgid vectors on old screen/tmux (int0x33 write-up) are OUT of scope for this walkthrough — separate CVE-specific walkthroughs if ever encountered.
+
 On **attacker**:
 
 `(echo "bash <<'EOF'"; sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' ~/scripts/af_unix_sock_enum.sh; echo "EOF") | xclip -selection clipboard`
@@ -354,6 +371,8 @@ Route on output markers:
 
 - `WRITABLE_AF_UNIX_SOCK[docker]: <path>` → [[Docker Socket Abuse]], use `<path>` as `<socket>`
 - `WRITABLE_AF_UNIX_SOCK[lxd]: <path>` → [[LXD Socket Abuse]], use `<path>` as `<socket>`
+- `WRITABLE_AF_UNIX_SOCK[tmux]: <path>` → [[Tmux Session Hijack]] (walkthrough not built; deferred to build-when-encountered — see stub above).
+- `WRITABLE_AF_UNIX_SOCK[screen]: <path>` → [[Screen Session Hijack]] (walkthrough not built; deferred to build-when-encountered — see stub above).
 - `WRITABLE_AF_UNIX_SOCK[redis]: <path>` → [[Redis Socket Abuse]], use `<path>` as `<socket>`
 - `WRITABLE_AF_UNIX_SOCK[memcached]: <path>` → no canonical chain, protocol has no code-execution primitive, take next marker
 - `WRITABLE_AF_UNIX_SOCK[unknown]: <path>` → [[Unknown Daemon Socket Abuse]], use `<path>` as `<socket>`
