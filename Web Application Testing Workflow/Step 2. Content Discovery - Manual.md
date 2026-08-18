@@ -20,9 +20,6 @@ ii. Find the `link` tag with the `href` to the `favicon`. For example:
 iii. You can now request the `favicon` file and hash it, to see if it is shown on the OWASP website. If it is, you may be able to find which Framework and Version the site was built with. An example:
 
 `andrew@orange:~$ curl https://iprotectu.atlassian.net/jira-favicon-scaled.png | md5sum`
-
-*Knowing the framework and version can be a powerful find as there may be public vulnerabilities in the framework, and the website might not be using the most up to date version. You can then search the for the Framework and the version number and see if there are any publicly available exploits.*
-
 ## 3. Sitemap.xml
 
 Unlike the robots.txt file, which restricts what search engine crawlers can look at, the sitemap.xml file gives a list of every file the website owner wishes to be listed on a search engine. These can sometimes contain areas of the website that are a bit more difficult to navigate to or even list some old webpages that the current site no longer uses but are still working behind the scenes. 
@@ -37,32 +34,28 @@ AND
 
 ## 4. HTTP Headers
 
-When we make requests to the web server, the server returns various HTTP headers. These headers can sometimes contain useful information such as the webserver software and possibly the programming/scripting language in use. In the below example, we can see the webserver is NGINX version 1.18.0 and runs PHP version 7.4.3. Using this information, we could find vulnerable versions of software being used.
+Response headers often leak webserver software, backend framework, and version — **feeds Lookup A/B version-keyed exploit hunting**.
 
-user@machine$ curl http://10.10.200.51 -v 
-*   Trying 10.10.200.51:80... 
-* TCP_NODELAY set 
-* Connected to 10.10.200.51 (10.10.200.51) port 80 (#0) 
-* GET / HTTP/1.1 
-* Host: 10.10.200.51 
-* User-Agent: curl/7.68.0 
-* Accept: */* 
-* Mark bundle as not supporting multiuse 
- 
-< HTTP/1.1 200 OK 
-< Server: nginx/1.18.0 (Ubuntu) 
-< X-Powered-By: PHP/7.4.3 
-< Date: Mon, 19 Jul 2021 14:39:09 GMT 
-< Content-Type: text/html; charset=UTF-8 
-< Transfer-Encoding: chunked < Connection: keep-alive`
+`curl -s -D - -o /dev/null <url>`
 
-Simply use `CURL` to fetch the response:
+- `-s` silent (no progress meter)
+- `-D -` dump response headers to stdout
+- `-o /dev/null` discard body
 
-`andrew@orange:~$ curl https://9w9ui5gs.iprotectu.co.uk -v`
+Uses GET, so headers represent a real browse. `curl -sI` (HEAD) is shorter but some frameworks/WAFs return different headers on HEAD than GET, or block HEAD entirely — GET form avoids both traps.
 
-## 5. Framework Stack
+Example output — target advertises `Server: nginx/1.18.0` and `X-Powered-By: PHP/7.4.3`:
 
-*Knowing the framework and version can be a powerful find as there may be public vulnerabilities in the framework, and the website might not be using the most up to date version. You can then search the for the Framework and the version number and see if there are any publicly available exploits.*
+```
+HTTP/1.1 200 OK
+Server: nginx/1.18.0 (Ubuntu)
+X-Powered-By: PHP/7.4.3
+Date: Mon, 19 Jul 2021 14:39:09 GMT
+Content-Type: text/html; charset=UTF-8
+Transfer-Encoding: chunked
+Connection: keep-alive
+```
+
 
 
 

@@ -24,13 +24,11 @@ Meaning:
 **Create a directory on your local machine for the specific target, and save the output of each scan in the directory.**
 ### **1.  `dir` mode (Directory and File Enum)**
 
-**FOR `dir` MODE USE THE WORD LISTS IN `/usr/share/wordlists/dirbuster`**
-
 1. Used to enumerate website directories and their files.
 
-`gobuster dir -u "http://www.example.com" -w /path/to/wordlist -r -o {file_name}.txt`
+`gobuster dir -u "http://<ip>:<port>" -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -r -o gobuster_dir_<ip>_<port>.txt`
 
-- `-r` This flags configures Gobuster to follow the redirect that it received as a response to the sent request. A HTTP redirect status code (e.g., 301 or 302) is used to redirect the client to a different URL.
+- `-r` follows redirects and reports only the **final** status. A `Status: 200` result may actually be `/hit → 301 → /hit/login → 200` — the URL you think returned 200 is not the URL that returned 200. For any hit worth investigating, run `curl -s -D - -o /dev/null http://<ip>:<port>/<hit>` to see the real chain (initial status + `Location` header).
 - **The URL must contain the protocol used, in this case, HTTP. This is important and required. If you pass the wrong protocol, the scan will fail.**
 
 2. Gobuster does not enumerate recursively. So, if the results from the initial scan show a directory path you are interested in, you will have to enumerate that specific directory separately. **Do NOT ignore this point, to do thorough enumeration, you need to see what directories you can find within directories (recursively), not just the root of the Web file system. The same holds trues for file searches; do not forget to look for files recursively inside directories and sub-directories.**
