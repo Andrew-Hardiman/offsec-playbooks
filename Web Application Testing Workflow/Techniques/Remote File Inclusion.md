@@ -1,5 +1,5 @@
 
-## 🔍 1. Identify Potential RFI Targets
+## 1. Identify Potential RFI Targets
 
 Look for URL parameters that include external files:
 
@@ -16,7 +16,7 @@ Look for URL parameters that include external files:
 
 ---
 
-## 🛠️ 2. Basic Testing
+## 2. Basic Testing
 
 Test if the parameter is vulnerable to external inclusion:
 
@@ -122,7 +122,7 @@ On Kali (or your attacking machine):
 - Avoid `system($_GET['cmd'])` in exams — it’s fine for testing, but it’s **single-command only** and non-interactive.
 ---
 
-## ⚡ 4. Common Protections / Bypasses
+## 4. Common Protections / Bypasses
 
 - **URL filters**:
     
@@ -144,9 +144,9 @@ On Kali (or your attacking machine):
 
 ---
 
-## 🔑 5. Useful Tips
+## 5. Useful Tips
 
 - RFI is only possible if `allow_url_include = On` in PHP.
     
-- If you can’t include a remote file directly, try **[[Step 13. File Inclusion - Local File Inclusion (LFI)]] → RCE**.
+- If you can’t include a remote file directly, try **[[Local File Inclusion]] → RCE**.
     
