@@ -1,5 +1,5 @@
 
-Bypass login without valid credentials — via injection payloads, request tampering, or exploiting server-side auth check flaws. Entry from [[Web Attack Checksheet]] sub-block 1.5 on login-form observation.
+Bypass login without valid credentials — via injection payloads, request tampering, or exploiting server-side auth check flaws. Entry from [[Web Attack Checksheet]] sub-block 1.6 on login-form observation.
 
 Sister files: [[Credential Attacks]] (default creds, brute force, stuffing, spray), [[Session Cookie Attacks]] (session/JWT), [[Password Reset Attacks]], [[Registration Attacks]], [[MFA Bypass]].
 
@@ -228,7 +228,7 @@ Fast final checks before exhaustion:
 - **Robots.txt hints:** already checked in WAC 2.1; if it disallowed `/admin` or similar, try direct access with all above techniques.
 - **Backup login page:** `/login.old`, `/login.bak`, `/login2`, `/login_test` — dev versions may skip auth.
 - **API endpoint variant:** `/api/login`, `/api/v1/login`, `/api/auth` — API endpoints may have weaker validation than web login.
-- **Registration-instead-of-login:** if register form exists (WAC 1.6), create account, use created account's session as authenticated context.
+- **Registration-instead-of-login:** if register form exists (WAC 1.7), create account, use created account's session as authenticated context.
 
 Route:
 
@@ -251,7 +251,7 @@ On verified bypass (session cookie, authenticated content, or direct-access foot
 
 3. Route by post-bypass surface:
 
-- Session cookie granted (opaque OR JWT) → re-walk [[Web Attack Checksheet]] sub-blocks 1.5-1.12 authenticated
+- Session cookie granted (opaque OR JWT) → re-walk [[Web Attack Checksheet]] sub-blocks 1.6-1.13 authenticated
 - JWT-shaped cookie → also consider [[Session Cookie Attacks]] JWT branch for privilege escalation
 - Direct RCE via authenticated feature → escalate to [[Linux Privilege Escalation Checksheet]] / [[Windows Privilege Escalation Checksheet]]
 - Admin surface reached with upload/exec feature → [[File Upload]] or relevant WAC technique

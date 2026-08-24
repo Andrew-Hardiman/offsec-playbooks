@@ -1,5 +1,5 @@
 
-Credential-based attacks against discovered login forms. Entry from [[Web Attack Checksheet]] sub-block 1.5 on login-form observation (fires Sections 1-4) and sub-block 1.13 on populated `users_<host>.txt` (fires Section 5).
+Credential-based attacks against discovered login forms. Entry from [[Web Attack Checksheet]] sub-block 1.6 on login-form observation (fires Sections 1-4) and sub-block 1.14 on populated `users_<host>.txt` (fires Section 5).
 
 Sister files: [[Login Bypass Techniques]] (injection, tampering, direct access), [[Username Enumeration]] (populates `users_<host>.txt`), [[Session Cookie Attacks]] (session/JWT), [[MFA Bypass]] (multi-step).
 
@@ -190,7 +190,7 @@ Route:
 
 ## 5. Enum-fed brute force
 
-Full password wordlist × target-enumerated usernames. Fires from WAC sub-block 1.13 when `users_<host>.txt` is populated by [[Username Enumeration]] or IDOR.
+Full password wordlist × target-enumerated usernames. Fires from WAC sub-block 1.14 when `users_<host>.txt` is populated by [[Username Enumeration]] or IDOR.
 
 Precondition: `users_<host>.txt` contains one or more entries. If empty → this section does not fire.
 
@@ -216,7 +216,7 @@ Re-run Hydra/ffuf above with `-P cewl_<host>.txt`.
 Route:
 
 - Success line printed → verify manually → Section 6
-- All combinations exhausted → return to [[Web Attack Checksheet]] sub-block after 1.13
+- All combinations exhausted → return to [[Web Attack Checksheet]] sub-block after 1.14
 
 ---
 
@@ -238,7 +238,7 @@ On verified successful login (recovered `<user>:<pass>`):
 
 4. Route by post-login surface:
 
-- Session cookie set (opaque OR JWT-shaped) → use in `Cookie:` header for authenticated requests; re-walk [[Web Attack Checksheet]] sub-blocks 1.5-1.12 authenticated (often reveals admin surface / additional routes invisible unauth)
+- Session cookie set (opaque OR JWT-shaped) → use in `Cookie:` header for authenticated requests; re-walk [[Web Attack Checksheet]] sub-blocks 1.6-1.13 authenticated (often reveals admin surface / additional routes invisible unauth)
 - JWT-shaped cookie (three base64 segments dot-separated) → also consider [[Session Cookie Attacks]] (JWT branch) for privilege escalation via token forge
 - Admin surface reached with RCE-viable feature (plugin/theme upload, arbitrary file upload, command exec panel) → [[File Upload]] or relevant WAC technique
 - Direct RCE / shell obtained via authenticated feature → escalate to [[Linux Privilege Escalation Checksheet]] / [[Windows Privilege Escalation Checksheet]]
@@ -250,5 +250,5 @@ On verified successful login (recovered `<user>:<pass>`):
 
 Sections 1-5 all exhausted without foothold:
 
-- If entered from WAC 1.5 → continue Step 1 walking (1.6 register form, then 1.7 forgot-password, etc.)
-- If entered from WAC 1.13 → return to [[Web Attack Checksheet]] Step 5 (deferred low-EV sweep)
+- If entered from WAC 1.5 → continue Step 1 walking (1.7 register form, then 1.8 forgot-password, etc.)
+- If entered from WAC 1.14 → return to [[Web Attack Checksheet]] Step 5 (deferred low-EV sweep)

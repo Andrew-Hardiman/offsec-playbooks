@@ -1,10 +1,10 @@
 
-Enumerate valid usernames via differential response on auth-adjacent forms. Output populates `users_<host>.txt` for consumption by [[Credential Attacks]] Section 5 (enum-fed brute force) triggered from [[Web Attack Checksheet]] sub-block 1.13.
+Enumerate valid usernames via differential response on auth-adjacent forms. Output populates `users_<host>.txt` for consumption by [[Credential Attacks]] Section 5 (enum-fed brute force) triggered from [[Web Attack Checksheet]] sub-block 1.14.
 
 Entry from [[Web Attack Checksheet]]:
-- Sub-block 1.5 (login form present) — login-differential enumeration
-- Sub-block 1.6 (register form present) — username-taken enumeration
-- Sub-block 1.7 (forgot-password form present) — email-sent-differential enumeration
+- Sub-block 1.6 (login form present) — login-differential enumeration
+- Sub-block 1.7 (register form present) — username-taken enumeration
+- Sub-block 1.8 (forgot-password form present) — email-sent-differential enumeration
 - [[IDOR]] technique file (cross-route) — user-record enumeration via URL parameter
 
 Also entered opportunistically from any newly-discovered auth-adjacent form (gobuster hit routed via re-apply mechanism, subdomain recursion).
@@ -27,7 +27,7 @@ De-duplicate periodically: `sort -u users_<host>.txt -o users_<host>.txt`.
 
 Determine which form(s) leak username validity. Send one known-invalid + one plausible username per form type; diff responses.
 
-### 1.1 Login form differential (from WAC sub-block 1.5)
+### 1.1 Login form differential (from WAC sub-block 1.6)
 
 ```bash
 echo "--- invalid username ---"
@@ -52,7 +52,7 @@ Route:
 - Time differs by >500ms → 5 (timing-based enumeration)
 - All responses identical → no login-form signal; 1.2
 
-### 1.2 Register form differential (from WAC sub-block 1.6)
+### 1.2 Register form differential (from WAC sub-block 1.7)
 
 ```bash
 echo "--- invalid username (should register successfully) ---"
@@ -70,7 +70,7 @@ Route:
 - Length or status differs → 3
 - All responses identical → no register-form signal; 1.3
 
-### 1.3 Forgot-password form differential (from WAC sub-block 1.7)
+### 1.3 Forgot-password form differential (from WAC sub-block 1.8)
 
 ```bash
 echo "--- invalid username ---"
@@ -209,12 +209,12 @@ Once `users_<host>.txt` is populated:
 
 2. Route:
 
-- Continue current [[Web Attack Checksheet]] Step 1 walk — sub-block 1.13 (credential attack with enumerated usernames) will fire later in the walk and consume `users_<host>.txt`
-- If already at sub-block 1.13 when this file completes → sub-block 1.13 fires immediately with populated list
+- Continue current [[Web Attack Checksheet]] Step 1 walk — sub-block 1.14 (credential attack with enumerated usernames) will fire later in the walk and consume `users_<host>.txt`
+- If already at sub-block 1.14 when this file completes → sub-block 1.14 fires immediately with populated list
 - If entered from [[IDOR]] technique file (cross-route from URL params enumeration) → return to IDOR to continue any remaining IDOR work, then normal WAC walk continues
 
 ---
 
 ## Exhaustion
 
-No forms with enumeration signals detected AND timing-based enum inconclusive → target does not leak username validity. Return to [[Web Attack Checksheet]] without appending to `users_<host>.txt`. Sub-block 1.13 will not fire (precondition unmet) and walk continues past it.
+No forms with enumeration signals detected AND timing-based enum inconclusive → target does not leak username validity. Return to [[Web Attack Checksheet]] without appending to `users_<host>.txt`. Sub-block 1.14 will not fire (precondition unmet) and walk continues past it.

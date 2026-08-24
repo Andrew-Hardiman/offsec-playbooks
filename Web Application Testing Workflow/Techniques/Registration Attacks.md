@@ -1,5 +1,5 @@
 
-Attacks against user registration / sign-up flows. Entry from [[Web Attack Checksheet]] sub-block 1.6 on register form observation.
+Attacks against user registration / sign-up flows. Entry from [[Web Attack Checksheet]] sub-block 1.7 on register form observation.
 
 Sister files: [[Username Enumeration]] (register-form enumeration signal), [[Credential Attacks]] (creds recovered may feed login), [[Login Bypass Techniques]] (bypass may include register-then-login).
 
@@ -159,7 +159,7 @@ curl -sX POST -c cookies.txt -b cookies.txt -d 'username=test_recon&password=Att
 - `/profile/<username>` → route to [[IDOR]] (path traversal for other users)
 - `/welcome?token=<t>` → capture token, inspect for reuse potential
 
-**Authenticated re-walk of WAC.** With `cookies.txt` (session cookie), re-walk [[Web Attack Checksheet]] sub-blocks 1.5-1.12 using `-b cookies.txt` on all curl commands. New authenticated surfaces often become visible:
+**Authenticated re-walk of WAC.** With `cookies.txt` (session cookie), re-walk [[Web Attack Checksheet]] sub-blocks 1.6-1.13 using `-b cookies.txt` on all curl commands. New authenticated surfaces often become visible:
 
 - Admin panels that showed 302→login now show content
 - API endpoints that returned 401 now return data

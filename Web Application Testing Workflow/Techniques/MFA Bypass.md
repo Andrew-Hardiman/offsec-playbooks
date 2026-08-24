@@ -1,5 +1,5 @@
 
-Bypass multi-factor authentication (MFA / 2FA / OTP). Entry from [[Web Attack Checksheet]] sub-block 1.5 when multi-step verification observed.
+Bypass multi-factor authentication (MFA / 2FA / OTP). Entry from [[Web Attack Checksheet]] sub-block 1.6 when multi-step verification observed.
 
 Sister files: [[Credential Attacks]] (first-factor password recovery), [[Session Cookie Attacks]] (session state manipulation), [[Login Bypass Techniques]] (may bypass first factor).
 

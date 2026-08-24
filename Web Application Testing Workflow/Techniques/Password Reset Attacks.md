@@ -1,5 +1,5 @@
 
-Attacks against password-reset flows. Entry from [[Web Attack Checksheet]] sub-block 1.7 on forgot-password form observation.
+Attacks against password-reset flows. Entry from [[Web Attack Checksheet]] sub-block 1.8 on forgot-password form observation.
 
 Sister files: [[Credential Attacks]] (credential attacks against login), [[Login Bypass Techniques]] (login bypass), [[Username Enumeration]] (enumerate via reset form).
 
@@ -240,7 +240,7 @@ On successful password reset for target user:
 3. Route to [[Credential Attacks]] Section 6 (post-success routing) with recovered `<target_user>:<new_password>`. From there:
 
 - Authenticate to login form, capture session
-- Re-walk WAC sub-blocks 1.5-1.12 authenticated
+- Re-walk WAC sub-blocks 1.6-1.13 authenticated
 - Further route by post-login surface (JWT tampering, admin RCE features, PrivEsc)
 
 ---
