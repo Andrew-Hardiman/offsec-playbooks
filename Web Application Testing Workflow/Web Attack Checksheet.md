@@ -120,15 +120,34 @@ Discover login form via:
 
 `~/scripts/web_auth_probe.sh <host> <port> --mode=login`
 
+Optional flags:
+
+- `--scheme=https` for TLS services (default: http)
+- `--verbose` to show DEAD (404) markers when summary reports 0 FOUND / 0 CANDIDATE
+
 Route on markers:
 
-- `LOGIN_FORM_FOUND: [<orig> → ]<final>` → login form discovered; `<login_path>` = final path (after `→` if present, else the path shown); walk in order:
+- `LOGIN_FORM_FOUND: [<orig> → ]<final>` → login form discovered; `<login_path>` = final path (after `→` if present, else the path shown).
+
+  **Capture form metadata** (required before technique walk):
+
+  `curl -sL http://<host>:<port>/<login_path> | grep -oiE '<(form|input)[^>]*>'`
+
+  From output, set the variables consumed by all downstream techniques:
+
+  - `<login_username_field>` = `name=` of the text or email input
+  - `<login_password_field>` = `name=` of the `type=password` input
+  - `<login_form_action>` = `action=` of the `<form>` tag (if absent, use `<login_path>`)
+  - `<login_csrf_field>` = `name=` of any hidden input whose name is exactly `_token`, `authenticity_token`, or `__RequestVerificationToken`, or contains `csrf` (case-insensitive; empty string if none)
+
+  **Walk techniques in order:**
+
   1. [[Credential Attacks]] Sections 1-4 (default creds, credential stuffing, hit-and-hope brute force, password spray) — Section 5 defers to sub-block 1.14
   2. [[Login Bypass Techniques]] (all sections — HTML comments, injection, tampering, direct access, header bypass, case-sensitivity, HTTP Basic Auth)
   3. [[Username Enumeration]] Section 1.1 (login-form differential signal detection — appends to `users_<host>.txt`)
   4. [[Session Cookie Attacks]] if Set-Cookie observed on any request during walk (per sub-block 1.9 detection)
   5. [[MFA Bypass]] if multi-step verification observed after successful first-factor auth
-- `LOGIN_CANDIDATE: [<orig> → ]<final> (<detail>)` (no FOUND for this path) → open final path in browser; if login form confirmed, `<login_path>` = final path, walk sequence above; if not confirmed, log INAPPLICABLE
+- `LOGIN_CANDIDATE: [<orig> → ]<final> (<detail>)` (no FOUND for this path) → open final path in browser; if login form confirmed, `<login_path>` = final path, follow LOGIN_FORM_FOUND branch above (capture metadata + walk techniques); if not confirmed, log INAPPLICABLE
 - `AUTH_CHALLENGE: [<orig> → ]<final> (code=401 scheme=Basic)` → walk [[Login Bypass Techniques]] "HTTP Basic Auth" section against that path
 - `AUTH_CHALLENGE` with scheme other than Basic (Bearer / Digest / etc.) → log informational, note as auth surface for later
 - Other markers (`RESTRICTED` / `METHOD_MISMATCH` / `SERVER_ERROR` / `NO_FORM` / `DEAD` / `UNREACHABLE`) → informational, no action in this sub-block
@@ -140,27 +159,66 @@ Discover register / sign-up form via:
 
 `~/scripts/web_auth_probe.sh <host> <port> --mode=register`
 
+Optional flags:
+
+- `--scheme=https` for TLS services (default: http)
+- `--verbose` to show DEAD (404) markers when summary reports 0 FOUND / 0 CANDIDATE
+
 Route on markers:
 
-- `REGISTER_FORM_FOUND: [<orig> → ]<final>` → register form discovered; `<signup_path>` = final path; walk in order:
+- `REGISTER_FORM_FOUND: [<orig> → ]<final>` → register form discovered; `<register_path>` = final path (after `→` if present, else the path shown).
+
+  **Capture form metadata** (required before technique walk):
+
+  `curl -sL http://<host>:<port>/<register_path> | grep -oiE '<(form|input)[^>]*>'`
+
+  From output, set the variables consumed by all downstream techniques:
+
+  - `<register_username_field>` = `name=` of the text input whose `name=` matches username (e.g. `username`, `user`, `uname`); empty string if form has no username input
+  - `<register_email_field>` = `name=` of the `type=email` input, or text input whose `name=` matches email (e.g. `email`, `mail`, `e_mail`); empty string if form has no email input
+  - `<register_password_field>` = `name=` of the first `type=password` input
+  - `<register_confirm_password_field>` = `name=` of the second `type=password` input; empty string if only one password input present
+  - `<register_form_action>` = `action=` of the `<form>` tag (if absent, use `<register_path>`)
+  - `<register_csrf_field>` = `name=` of any hidden input whose name is exactly `_token`, `authenticity_token`, or `__RequestVerificationToken`, or contains `csrf` (case-insensitive; empty string if none)
+
+  **Walk techniques in order:**
+
   1. [[Registration Attacks]] (all sections — privileged usernames, username variants, parameter tampering, weak password policy, race conditions, post-registration surface enumeration)
   2. [[Username Enumeration]] Section 1.2 (register-form signal detection — appends to `users_<host>.txt`)
-- `REGISTER_CANDIDATE: [<orig> → ]<final> (<detail>)` (no FOUND for this path) → open final path in browser; if register form confirmed, `<signup_path>` = final path, walk sequence above; if not confirmed, log INAPPLICABLE
+- `REGISTER_CANDIDATE: [<orig> → ]<final> (<detail>)` (no FOUND for this path) → open final path in browser; if register form confirmed, `<register_path>` = final path, follow REGISTER_FORM_FOUND branch above (capture metadata + walk techniques); if not confirmed, log INAPPLICABLE
 - Other markers (`AUTH_CHALLENGE` / `RESTRICTED` / `METHOD_MISMATCH` / `SERVER_ERROR` / `NO_FORM` / `DEAD` / `UNREACHABLE`) → informational, no action in this sub-block
 - No `REGISTER_FORM_FOUND` AND no `REGISTER_CANDIDATE` → 1.8
 
 ### 1.8 Forgot-password form
 
-Discover forgot-password / reset form via `~/scripts/web_auth_probe.sh` (see [[Scripts Index#web_auth_probe.sh]] for full marker contract).
+Discover forgot-password / reset form via:
 
 `~/scripts/web_auth_probe.sh <host> <port> --mode=forgot`
 
+Optional flags:
+
+- `--scheme=https` for TLS services (default: http)
+- `--verbose` to show DEAD (404) markers when summary reports 0 FOUND / 0 CANDIDATE
+
 Route on markers:
 
-- `FORGOT_FORM_FOUND: [<orig> → ]<final>` → forgot-password form discovered; `<reset_path>` = final path; walk in order:
+- `FORGOT_FORM_FOUND: [<orig> → ]<final>` → forgot-password form discovered; `<forgot_path>` = final path (after `→` if present, else the path shown).
+
+  **Capture form metadata** (required before technique walk):
+
+  `curl -sL http://<host>:<port>/<forgot_path> | grep -oiE '<(form|input)[^>]*>'`
+
+  From output, set the variables consumed by all downstream techniques:
+
+  - `<forgot_identifier_field>` = `name=` of the input where the user provides their account identifier (`type=email` input, or text input whose `name=` matches `email`, `mail`, `username`, `user`, `login`, `identifier`)
+  - `<forgot_form_action>` = `action=` of the `<form>` tag (if absent, use `<forgot_path>`)
+  - `<forgot_csrf_field>` = `name=` of any hidden input whose name is exactly `_token`, `authenticity_token`, or `__RequestVerificationToken`, or contains `csrf` (case-insensitive; empty string if none)
+
+  **Walk techniques in order:**
+
   1. [[Password Reset Attacks]] (all sections — token attacks, URL manipulation, poisoning, logic flaws, security questions)
   2. [[Username Enumeration]] Section 1.3 (forgot-password signal detection — appends to `users_<host>.txt`)
-- `FORGOT_CANDIDATE: [<orig> → ]<final> (<detail>)` (no FOUND for this path) → open final path in browser; if forgot-password form confirmed, `<reset_path>` = final path, walk sequence above; if not confirmed, log INAPPLICABLE
+- `FORGOT_CANDIDATE: [<orig> → ]<final> (<detail>)` (no FOUND for this path) → open final path in browser; if forgot-password form confirmed, `<forgot_path>` = final path, follow FORGOT_FORM_FOUND branch above (capture metadata + walk techniques); if not confirmed, log INAPPLICABLE
 - Other markers (`AUTH_CHALLENGE` / `RESTRICTED` / `METHOD_MISMATCH` / `SERVER_ERROR` / `NO_FORM` / `DEAD` / `UNREACHABLE`) → informational, no action in this sub-block
 - No `FORGOT_FORM_FOUND` AND no `FORGOT_CANDIDATE` → 1.9
 
