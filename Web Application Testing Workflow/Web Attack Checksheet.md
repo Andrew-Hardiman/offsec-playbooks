@@ -138,7 +138,22 @@ Route on markers:
   - `<login_username_field>` = `name=` of the text or email input
   - `<login_password_field>` = `name=` of the `type=password` input
   - `<login_form_action>` = `action=` of the `<form>` tag (if absent, use `<login_path>`)
-  - `<login_csrf_field>` = `name=` of any hidden input whose name is exactly `_token`, `authenticity_token`, or `__RequestVerificationToken`, or contains `csrf` (case-insensitive; empty string if none)
+
+  **Probe statefulness** (required before technique walk):
+
+  `~/scripts/statefulness_probe.sh --host=<host> --port=<port> --path=<login_path>`
+
+    Optional flags:
+
+  - `--scheme=https` for TLS services (default: http)
+  - `--delay=<ms>` milliseconds between the two GETs (default: 0)
+
+  Route on `ROUTE:` marker:
+
+  - `ROUTE: shell` → set `<login_static_cookies>` = `STATIC_COOKIES:` value, `<login_static_hidden_fields>` = `STATIC_HIDDEN_FIELDS:` value; walk techniques via shell tools with these vars in POSTs.
+  - `ROUTE: burp` → in Burp, build the base target request with `STATIC_COOKIES:` value in the Cookie header and `STATIC_HIDDEN_FIELDS:` value in the POST body; set up state-refresh macro per [[Automating Fresh State in Burp]] using `ROTATING_*` + `NEW_*_GET2` marker names as the "Update only the following parameters and headers" list; walk techniques via Burp Intruder.
+  - `BAIL: <reason>` → probe could not classify; try [[Automating Fresh State in Burp]] manually, or log INAPPLICABLE if login path itself broken.
+  - `RATE_LIMITED: <detail>` → re-run with higher `--delay=<ms>` (start 500; double until throttling clears).
 
   **Walk techniques in order:**
 
@@ -179,7 +194,22 @@ Route on markers:
   - `<register_password_field>` = `name=` of the first `type=password` input
   - `<register_confirm_password_field>` = `name=` of the second `type=password` input; empty string if only one password input present
   - `<register_form_action>` = `action=` of the `<form>` tag (if absent, use `<register_path>`)
-  - `<register_csrf_field>` = `name=` of any hidden input whose name is exactly `_token`, `authenticity_token`, or `__RequestVerificationToken`, or contains `csrf` (case-insensitive; empty string if none)
+
+  **Probe statefulness** (required before technique walk):
+
+  `~/scripts/statefulness_probe.sh --host=<host> --port=<port> --path=<register_path>`
+
+  Optional flags:
+
+  - `--scheme=https` for TLS services (default: http)
+  - `--delay=<ms>` milliseconds between the two GETs (default: 0)
+
+  Route on `ROUTE:` marker:
+
+  - `ROUTE: shell` → set `<register_static_cookies>` = `STATIC_COOKIES:` value, `<register_static_hidden_fields>` = `STATIC_HIDDEN_FIELDS:` value; walk techniques via shell tools with these vars in POSTs.
+  - `ROUTE: burp` → in Burp, build the base target request with `STATIC_COOKIES:` value in the Cookie header and `STATIC_HIDDEN_FIELDS:` value in the POST body; set up state-refresh macro per [[Automating Fresh State in Burp]] using `ROTATING_*` + `NEW_*_GET2` marker names as the "Update only the following parameters and headers" list; walk techniques via Burp Intruder.
+  - `BAIL: <reason>` → probe could not classify; try [[Automating Fresh State in Burp]] manually, or log INAPPLICABLE if register path itself broken.
+  - `RATE_LIMITED: <detail>` → re-run with higher `--delay=<ms>` (start 500; double until throttling clears).
 
   **Walk techniques in order:**
 
@@ -212,7 +242,22 @@ Route on markers:
 
   - `<forgot_identifier_field>` = `name=` of the input where the user provides their account identifier (`type=email` input, or text input whose `name=` matches `email`, `mail`, `username`, `user`, `login`, `identifier`)
   - `<forgot_form_action>` = `action=` of the `<form>` tag (if absent, use `<forgot_path>`)
-  - `<forgot_csrf_field>` = `name=` of any hidden input whose name is exactly `_token`, `authenticity_token`, or `__RequestVerificationToken`, or contains `csrf` (case-insensitive; empty string if none)
+
+  **Probe statefulness** (required before technique walk):
+
+  `~/scripts/statefulness_probe.sh --host=<host> --port=<port> --path=<forgot_path>`
+
+  Optional flags:
+
+  - `--scheme=https` for TLS services (default: http)
+  - `--delay=<ms>` milliseconds between the two GETs (default: 0)
+
+  Route on `ROUTE:` marker:
+
+  - `ROUTE: shell` → set `<forgot_static_cookies>` = `STATIC_COOKIES:` value, `<forgot_static_hidden_fields>` = `STATIC_HIDDEN_FIELDS:` value; walk techniques via shell tools with these vars in POSTs.
+  - `ROUTE: burp` → in Burp, build the base target request with `STATIC_COOKIES:` value in the Cookie header and `STATIC_HIDDEN_FIELDS:` value in the POST body; set up state-refresh macro per [[Automating Fresh State in Burp]] using `ROTATING_*` + `NEW_*_GET2` marker names as the "Update only the following parameters and headers" list; walk techniques via Burp Intruder.
+  - `BAIL: <reason>` → probe could not classify; try [[Automating Fresh State in Burp]] manually, or log INAPPLICABLE if forgot path itself broken.
+  - `RATE_LIMITED: <detail>` → re-run with higher `--delay=<ms>` (start 500; double until throttling clears).
 
   **Walk techniques in order:**
 

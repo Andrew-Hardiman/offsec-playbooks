@@ -3,29 +3,6 @@ Credential-based attacks against discovered login forms. Entry from [[Web Attack
 
 Ordering: default creds first (30-sec cost, high P on OSCP+); credential stuffing next (if external pair list); hit-and-hope brute force with common usernames (no enum required); password spray (one password × many users, evades lockout); enum-fed brute force last (requires target-enumerated usernames from [[Username Enumeration]]). Pre-flight checks cross-cut all sections — run once before Section 1.
 
-
-
-**I conclude we need to test for the following: all hidden fields; cookie header values; CSRF tokens; session identifiers; nonces; custom-named tokens the CSRF regex does not match; JavaScript computed tokens; Header-based tokens; Referer/origin header checks? That's what I can think of**
-
-Your list is complete for what's detectable by GET-based inspection. My groupings:
-
-**Detectable by structured GET-diff** (name-agnostic, catches everything regardless of what the app calls it):
-
-- All hidden `<input type="hidden">` fields — subsumes CSRF tokens, nonces, custom-named tokens, session identifiers embedded in the form
-- All Set-Cookie header values
-- Meta-tag tokens (`<meta name="csrf-token" content="...">`) that JS reads to build POST headers
-
-**NOT detectable by GET-diff (fundamentally requires browser or POST behavioral testing):**
-
-- JavaScript-computed tokens where JS fetches or computes a value dynamically per-request
-- Header-based POST-time checks (Referer, Origin, User-Agent whitelist)
-- Two-request flows (multi-step verify)
-- Bot-detection challenges (Turnstile, hCaptcha, Cloudflare JS challenge)
-
-Your proposal — warning notice for two-request flows and bot-detection — is right for those. Fundamental scope limit; can't be closed shell-side.
-
-For headers (Referer/Origin/UA), we don't need to _detect_ them — we can defensively _always_
-
 ---
 
 ## Pre-flight checks
