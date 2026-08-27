@@ -7,35 +7,9 @@ Ordering: default creds first (30-sec cost, high P on OSCP+); credential stuffin
 
 ## Pre-flight checks
 
-Run once before proceeding. Determines whether shell path is viable (this note/playbook) or the operator must route to Burp `[[Burp Credential Attacks]]`. Stop at first sub-block that routes out — subsequent sections (Rate limiting profile, SUCCESS/FAIL oracle, Sections 1-5) apply only to the shell path.
+Run Statefulness Probe (WAC 1.6) against the login form first if not already done. `ROUTE: burp` (rotating cookies / hidden fields) → `[[Burp Credential Attacks]]`. `ROUTE: shell` → proceed.
 
-⚠️ `[[Burp Credential Attacks]]` playbook body — build-when-encountered. CSRF and cookies-matter routes below dispatch here. Points to include: (1) Setup — Burp session-handling chain: [[Testing Replayability in Burp]] (confirm fresh state needed) → [[Fresh State Per Attempt]] (identify which fields to refresh — CSRF token / session cookie / hidden field / combination) → [[Automating Fresh State in Burp]] (implement macro + session handling rule); (2) Attack modes per section — Sniper (§1 default creds), Pitchfork (§2 credential stuffing), Cluster Bomb (§3 hit-and-hope, §4 spray, §5 enum-fed); (3) Payload sets — same wordlists as CA §1-5 (`~/scripts/wordlists/default_creds.txt`, `xato-net-10-million-usernames-top1M`, `rockyou.txt`, `users_<host>.txt`); (4) Oracle by app class — content/redirect: Intruder Grep-Match on `<login_form_marker>` presence (fail) / absence (success) after Follow Redirects enabled; api: response filter on HTTP 200; (5) Rate-limit tuning — Pre-flight rate-limit probe does not run on the Burp path; derive independently via Repeater rapid-send or Intruder low-thread test, set Resource Pool request delay accordingly; (6) Build trigger — first real-target encounter where CSRF or cookies-matter Pre-flight routes here.
-
-### CSRF token detection
-
-`curl -s http://<host>:<port>/<login_path> | grep -oiE 'name=["'"'"']?(_?csrf|authenticity_token|__requestverificationtoken)[^>]*' || echo "NO_CSRF_TOKEN"`
-
-Route on output:
-
-- Token field name printed → CSRF protection present. Shell tooling (Hydra/ffuf/curl-loop) cannot handle per-request tokens → route to `[[Burp Credential Attacks]]` (see ⚠️ above); skip remaining Pre-flight sub-blocks.
-- `NO_CSRF_TOKEN` → proceed to cookies-matter check.
-
-### Cookies-matter check
-
-Test whether the login POST requires session cookies to be accepted at all. Shell tooling (Hydra/ffuf/curl loops + `auth_oracle_probe.sh`) sends POST requests with no cookies attached — if the app requires them, every attempt returns a session-error response (403 "session required", 200 with "please reload page", etc.) that the oracle probe would misclassify. Catches both stable-cookie apps (Type B) and cookie-rotated-per-use apps (Type C); both route to Burp.
-
-⚠️ Substitute captured vars before pasting.
-
-```bash
-CJ=$(mktemp); curl -sk -c "$CJ" "http://<host>:<port>/<login_path>" -o /dev/null; S1=$(curl -sk -b "$CJ" -X POST -o /dev/null -w '%{http_code}:%{size_download}' --data-urlencode "<login_username_field>=xyzabc123xxx@invalid.test" --data-urlencode "<login_password_field>=wrong_ZZZ_9999" "http://<host>:<port>/<login_form_action>"); S2=$(curl -sk -X POST -o /dev/null -w '%{http_code}:%{size_download}' --data-urlencode "<login_username_field>=xyzabc123xxx@invalid.test" --data-urlencode "<login_password_field>=wrong_ZZZ_9999" "http://<host>:<port>/<login_form_action>"); rm -f "$CJ"; echo "with_cookies=$S1 without_cookies=$S2"
-```
-
-Route on output:
-
-- `with_cookies == without_cookies` (same status AND same size) → cookies do not affect login POST. Proceed to rate-limit probe.
-- `with_cookies != without_cookies` (status differs OR size differs) → login POST behaves differently with vs without cookies → cookies matter → route to `[[Burp Credential Attacks]]` (see ⚠️ above); skip remaining Pre-flight sub-blocks.
-
-Limitation: check compares status+size only. Body-diff was considered but rejected — apps with rendered timestamps / request UUIDs / debug markers produce byte-differing bodies with identical size, false-positiving into Burp. Rare false-negative case (cookies matter but response has same status AND same size AND only body-text differs) surfaces later as Section 1-5 zero-hits → escalate to Burp then.
+⚠️ `[[Burp Credential Attacks]]` playbook body — build-when-encountered. Dispatch here comes from Statefulness Probe `ROUTE: burp` (WAC 1.6, upstream) and from the SUCCESS/FAIL oracle `BAIL` route below. Points to include: (1) Setup — Burp session-handling chain: [[Testing Replayability in Burp]] (confirm fresh state needed) → [[Fresh State Per Attempt]] (identify which fields to refresh — CSRF token / session cookie / hidden field / combination) → [[Automating Fresh State in Burp]] (implement macro + session handling rule); (2) Attack modes per section — Sniper (§1 default creds), Pitchfork (§2 credential stuffing), Cluster Bomb (§3 hit-and-hope, §4 spray, §5 enum-fed); (3) Payload sets — same wordlists as CA §1-5 (`~/scripts/wordlists/default_creds.txt`, `xato-net-10-million-usernames-top1M`, `rockyou.txt`, `users_<host>.txt`); (4) Oracle by app class — content/redirect: Intruder Grep-Match on `<login_form_marker>` presence (fail) / absence (success) after Follow Redirects enabled; api: response filter on HTTP 200; (5) Rate-limit tuning — Pre-flight rate-limit probe does not run on the Burp path; derive independently via Repeater rapid-send or Intruder low-thread test, set Resource Pool request delay accordingly; (6) Build trigger — first real-target encounter where Statefulness Probe emits `ROUTE: burp` or the oracle `BAIL`s.
 
 ---
 
@@ -101,6 +75,7 @@ done << 'EOF'
 admin:admin
 admin:password
 admin:
+andrew@example.com:password123
 root:root
 root:toor
 root:password
