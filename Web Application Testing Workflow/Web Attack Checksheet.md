@@ -33,13 +33,60 @@ Fires any time a product or version token is observed during the walk. Sub-block
 
 ## Username accumulator convention
 
-Used by sub-blocks 1.5, 1.6, 1.7, 1.8, 1.11, and [[IDOR]] via cross-route.
-
 Any sub-block that enumerates or verifies a valid target username appends to `users_<host>.txt`:
 
 `echo '<username>' >> users_<host>.txt`
 
-De-duplicate periodically: `sort -u users_<host>.txt -o users_<host>.txt`. Sub-block 1.14 consumes this file as its precondition input for enum-fed credential attack.
+De-duplicate periodically: `sort -u users_<host>.txt -o users_<host>.txt`. The `users_<host>.txt` sub-routine in [[#Accumulator re-fire check]] consumes this file at every Step boundary.
+
+---
+
+## Credential accumulator convention
+
+Used by [[Authenticated Walk]].
+
+Any sub-block that recovers or creates a working credential pair appends to `creds_<host>.txt`:
+
+`echo '<username>:<password>' >> creds_<host>.txt`
+
+Format: `<username>:<password>` per line. De-duplicate periodically: `sort -u creds_<host>.txt -o creds_<host>.txt`.
+
+---
+
+## Accumulator re-fire check
+
+Fires at end of each Step (1-5) and at end of [[Authenticated Walk]] per-cred iteration. Runs the sub-routine matched to each accumulator with unwalked entries. Every action fires against every unwalked entry; entry marked walked after all applicable actions complete.
+
+### `users_<host>.txt` sub-routine
+
+Runs when `users_<host>.txt` has entries not present in `users_<host>.txt.walked`:
+
+`comm -23 <(sort -u users_<host>.txt) <(sort -u users_<host>.txt.walked 2>/dev/null)`
+
+Actions (each fires against every unwalked entry; preconditions checked per action):
+
+1. [[Credential Attacks]] §5 (enum-fed credential attack). Precondition: a login form was discovered anywhere in the walk. Treat entry as username; convert to `<entry>@<known_domain>` if login form uses email format.
+2. [[Password Reset Attacks]] against unauth forgot-password form. Precondition: a forgot-password form was discovered anywhere in the walk. Treat entry as identifier; convert to email format if forgot form expects email.
+
+Mark entry walked after all applicable actions run:
+
+`echo '<entry>' >> users_<host>.txt.walked`
+
+Any working credentials yielded by either action → `echo '<user>:<pass>' >> creds_<host>.txt` (per Credential accumulator convention). Handled by `creds_<host>.txt` sub-routine below.
+
+### `creds_<host>.txt` sub-routine
+
+Runs when `creds_<host>.txt` has entries not present in `creds_<host>.txt.walked`:
+
+`comm -23 <(sort -u creds_<host>.txt) <(sort -u creds_<host>.txt.walked 2>/dev/null)`
+
+Action:
+
+- [[Authenticated Walk]]
+
+Mark **all** newly-walked entries after Auth Walk returns:
+
+`echo '<entry>' >> creds_<host>.txt.walked`
 
 ---
 
@@ -110,7 +157,7 @@ Route on inspection (per finding, may fire multiple):
 - Framework name + version → apply **Version-discovery route**
 - Framework name only, no version → note framework hint
 - Username(s) → `echo '<username>' >> users_<host>.txt` (per Username accumulator convention)
-- Credentials (user:pass, key=value) → try against any known login form (route to sub-block 1.6 with known credentials)
+- Credentials (user:pass, key=value) → `echo '<user>:<pass>' >> creds_<host>.txt` (per Credential accumulator convention); continue
 - Endpoint / path → `curl -s http://<host>:<port>/<path>`; new surface → re-apply Step 1 sub-blocks 1.6–1.13 against it
 - `NO_COMMENTS` or nothing exploitable → 1.6
 
@@ -332,29 +379,18 @@ For each hit, test unauth access:
 
 Route on status code:
 
-- 200 / 302 (no auth challenge) → new surface reached, re-apply Step 1 sub-blocks 1.6–1.13 against `http://<host>:<port>/<path>/`. If `users_<host>.txt` grew during re-application, re-run 1.14 after.
+- 200 / 302 (no auth challenge) → new surface reached, re-apply Step 1 sub-blocks 1.6–1.13 against `http://<host>:<port>/<path>/`
 - 401 / 403 / redirect to login → note the admin path for later credential re-use; if creds recovered anywhere later → try against this path
-- `NO_ADMIN_LINK` → 1.14
-
-### 1.14 Credential attack with enumerated usernames
-
-Fires [[Credential Attacks]] Section 5 (enum-fed brute force) against discovered login form using target-enumerated usernames from `users_<host>.txt`.
-
-Preconditions:
-
-- A login form was discovered in 1.6 (or via re-apply from 1.13, 2.1, 2.2, 3.1/3.2, 4.5)
-- `users_<host>.txt` is populated
-
-Check preconditions:
-
-`[ -f users_<host>.txt ] && [ -s users_<host>.txt ] && wc -l users_<host>.txt || echo "USERS_ACCUMULATOR_EMPTY"`
-
-Route:
-
-- User count > 0 AND login form was discovered → [[Credential Attacks]] Section 5
-- `USERS_ACCUMULATOR_EMPTY` OR no login form discovered anywhere in walk → Step 2
+- `NO_ADMIN_LINK` → continue
 
 Reference: [[Step 1. Walking An Application]]
+
+---
+
+## — Boundary — end of Step 1
+
+→ [[#Accumulator re-fire check]]
+→ Step 2
 
 ---
 
@@ -366,7 +402,7 @@ Reference: [[Step 1. Walking An Application]]
 
 Route on output:
 
-- Entries under `Disallow:` → for each, `curl -s -o /dev/null -w "%{http_code}\n" http://<host>:<port>/<path>`; 200/302 → new surface, re-apply Step 1 sub-blocks 1.6–1.13 against it; if `users_<host>.txt` grew, re-run 1.14
+- Entries under `Disallow:` → for each, `curl -s -o /dev/null -w "%{http_code}\n" http://<host>:<port>/<path>`; 200/302 → new surface, re-apply Step 1 sub-blocks 1.6–1.13 against it
 - `ROBOTS_ABSENT` → 2.2
 
 ### 2.2 sitemap.xml
@@ -375,10 +411,17 @@ Route on output:
 
 Route on output:
 
-- `<loc>` entries present → visit each; new surface → re-apply Step 1 sub-blocks 1.6–1.13 against each; if `users_<host>.txt` grew, re-run 1.14
-- `SITEMAP_ABSENT` → Step 3
+- `<loc>` entries present → visit each; new surface → re-apply Step 1 sub-blocks 1.6–1.13 against each
+- `SITEMAP_ABSENT` → continue
 
 Reference: [[Step 2. Content Discovery - Manual]]
+
+---
+
+## — Boundary — end of Step 2
+
+→ [[#Accumulator re-fire check]]
+→ Step 3
 
 ---
 
@@ -407,10 +450,8 @@ Route per hit path:
 - Path matches `forgot`, `reset`, `recover` → re-apply Step 1 sub-block 1.8 (forgot-password form) against `<path>`
 - Path matches `upload`, `files`, `submit` → re-apply Step 1 sub-block 1.10 (upload surface) against `<path>`
 - Path matches `api`, `v1`, `v2`, `graphql`, `rest` → 3.3
-- Path matches `.git`, `.env`, `.htaccess`, `backup`, `config`, `phpinfo`, `.bak`, `.old`, `web.config` → `curl -s http://<host>:<port>/<path>`; inspect for creds/config/source; creds recovered → try against any known login form (route to sub-block 1.6 with known credentials); no creds → log, next hit
+- Path matches `.git`, `.env`, `.htaccess`, `backup`, `config`, `phpinfo`, `.bak`, `.old`, `web.config` → `curl -s http://<host>:<port>/<path>`; inspect for creds/config/source; creds recovered → `echo '<user>:<pass>' >> creds_<host>.txt` (per Credential accumulator convention); continue
 - Any other 200/301/302 hit → re-apply Step 1 sub-blocks 1.6–1.13 against `<path>`
-
-For any re-application: if `users_<host>.txt` grew during re-application, re-run 1.14 after.
 
 - No non-403/404 hits (empty grep output above) → 3.3
 
@@ -423,9 +464,16 @@ Route per endpoint:
 - Status 200 with JSON/data content → re-apply Step 1 sub-block 1.11 (URL parameters) against endpoint; also check for [[SSRF]] if endpoint accepts URL-shape param
 - Status 401/403 with informative error (e.g. reveals JWT header expected, Bearer scheme) → note auth mechanism; JWT/Bearer visible → [[Session Cookie Attacks]] (JWT tampering branch)
 - Response contains numeric IDs, UUIDs, or ID-shape fields → [[IDOR]] (may append usernames to `users_<host>.txt` via user-record enumeration)
-- All endpoints returned 404 or no useful content → Step 4
+- All endpoints returned 404 or no useful content → continue
 
 Reference: [[Step 4. Content Discovery - Automated Discovery (utilising GoBuster)]]
+
+---
+
+## — Boundary — end of Step 3
+
+→ [[#Accumulator re-fire check]]
+→ Step 4
 
 ---
 
@@ -477,7 +525,7 @@ If flooded by same-length responses, append `--exclude-length <n>` where `<n>` =
 Route on output (`grep 'Found:' gobuster_vhost_<host>.txt`):
 
 - Vhost in `Found:` line → add to vhost list for 4.5
-- No `Found:` lines → Step 5
+- No `Found:` lines → skip 4.5 and continue
 
 ### 4.5 Validate and recurse
 
@@ -499,6 +547,13 @@ Reference: [[Step 5. Subdomain Enumeration - OSINT]], [[Step 6. Subdomain Enumer
 
 ---
 
+## — Boundary — end of Step 4
+
+→ [[#Accumulator re-fire check]]
+→ Step 5
+
+---
+
 ## Step 5 — Deferred low-EV route sweep
 
 Walks routes deferred by Steps 1-4 sub-blocks that logged DEFERRED entries.
@@ -513,7 +568,17 @@ For each DEFERRED entry:
 
 XSS foothold typically via session hijack — captured cookie feeds back to [[Session Cookie Attacks]] or direct impersonation. Race Conditions typically eval/proof only — log finding, continue.
 
-No DEFERRED entries → Exhaustion.
+No DEFERRED entries → Boundary check.
+
+---
+
+## — Boundary — end of Step 5
+
+End of unauth walk. Fires once, in sequence:
+
+1. → [[#Accumulator re-fire check]] (`users_<host>.txt` sub-routine may yield new creds)
+2. Session-establishment opportunity present (`creds_<host>.txt` non-empty OR register form discovered anywhere during Steps 1-5) → [[Authenticated Walk]]
+3. No session-establishment opportunity OR Auth Walk complete → Exhaustion
 
 ---
 

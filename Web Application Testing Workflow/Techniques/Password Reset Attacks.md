@@ -1,5 +1,5 @@
 
-Attacks against password-reset flows. Entry from [[Web Attack Checksheet]] sub-block 1.8 on forgot-password form observation.
+Attacks against password-reset flows.
 
 Ordering: fast checks first (obtain token, inspect for predictability); token attacks (prediction, reuse); reset URL manipulation (parameter tampering); host header / password reset poisoning (medium cost, requires attacker-controlled host); reset flow logic flaws (case sensitivity, sequence bypass); security question weakness. On successful reset → login as target user → route to [[Credential Attacks]] Section 6 (post-success routing).
 
@@ -7,7 +7,11 @@ Ordering: fast checks first (obtain token, inspect for predictability); token at
 
 ## Pre-flight — obtain a reset token
 
-Attacks in Sections 1-4 require obtaining at least one reset token to analyse. Trigger reset for a user you control (register test account first via [[Registration Attacks]] if needed; else use a known-valid username from [[Username Enumeration]] output).
+Attacks in Sections 1-4 require obtaining at least one reset token to analyse. Priority order for which user to trigger reset against:
+
+1. Highest-privilege real user from `users_<host>.txt` (e.g. entries flagged `IDOR_ADMIN` in `route_<ip>.txt`) — if the reset flow discloses the token on-screen or in the response body, that user's account is compromised immediately with no further work
+2. Any other real user from `users_<host>.txt` — same token disclosure benefit, lower-privilege target
+3. Self-registered test account — fallback only when real-user tokens are unreachable (e.g. token delivered exclusively via email and you cannot observe their inbox)
 
 ```bash
 curl -sX POST -i -d '<forgot_identifier_field>=<test_user>' http://<host>:<port>/<forgot_form_action>
@@ -23,8 +27,20 @@ Save the reset URL or token as `<token>` and the reset URL structure as `<reset_
 
 Route:
 
-- Token/URL captured → Section 1
+- Token/URL captured for a real user (priority 1 or 2, above) — working reset URL in hand → Set password + verify
+- Token/URL captured for a self-registered test account (priority 3) — need to analyse to derive a real user's token → Section 1
 - No delivery mechanism accessible (real email required, no inbox) → Section 3 (URL-parameter attacks may still work without a captured token) OR Section 6 (skip token attacks)
+
+#### Set password + verify
+
+Fires when Preflight captured a working reset URL for a real user. Skip if the token belongs to a self-registered test account.
+
+Visit `<reset_url_pattern>` in Firefox, submit `<new_password>`.
+
+Route:
+
+- Login response = redirect to authenticated area / valid session cookie → Section 7
+- Login fails → reset didn't take (password-policy rejection, second-factor requirement, or session expiry on the token) → investigate manually; if unresolvable → Section 1
 
 ---
 
@@ -225,21 +241,21 @@ Route:
 
 ## 7. Post-success routing
 
-On successful password reset for target user:
+On successful password reset for a real user:
 
-1. Log to `route_<ip>.txt`:
+1. Log the discovery:
 
-    `printf '[Password Reset Attacks] APPLIED: reset <target_user> password on <host>:<port>\n' >> route_<ip>.txt`
+```bash
+    printf '[Password Reset Attacks] APPLIED: reset <test_user> password on <host>:<port>\n' >> route_<ip>.txt
+```
 
-2. Save recovered creds:
+2. Append recovered cred to accumulator:
 
-    `echo '<target_user>:<new_password>' >> creds_<host>.txt`
+```bash
+    echo '<test_user>:<new_password>' >> creds_<host>.txt
+```
 
-3. Route to [[Credential Attacks]] Section 6 (post-success routing) with recovered `<target_user>:<new_password>`. From there:
-
-- Authenticate to login form, capture session
-- Re-walk WAC sub-blocks 1.6-1.13 authenticated
-- Further route by post-login surface (JWT tampering, admin RCE features, PrivEsc)
+3. Return to caller.
 
 ---
 

