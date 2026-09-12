@@ -15,7 +15,7 @@ Yields: arrow keys, basic tab completion (filenames, commands by PATH), working 
 
 ## Fallback when `script` is unavailable
 
-`script` is from util-linux, present on essentially every Linux system. Confirmed absent only on minimal/embedded targets. Try in order:
+`script` is from util-linux, present on essentially every Linux system. Confirmed absent only on minimal/embedded targets. **Try in order** — once one works, continue to [[#Full — Ctrl+C handling, terminal size, and TERM setup]] for a fully functional terminal (Ctrl+C, arrow keys, resize, `sudo`/`su`):
 
 `python3 -c 'import pty; pty.spawn("/bin/bash")'`
 

@@ -314,7 +314,7 @@ Route on markers:
 - Other markers (`AUTH_CHALLENGE` / `RESTRICTED` / `METHOD_MISMATCH` / `SERVER_ERROR` / `NO_FORM` / `DEAD` / `UNREACHABLE`) → informational, no action in this sub-block
 - No `FORGOT_FORM_FOUND` AND no `FORGOT_CANDIDATE` → 1.9
 
-### 1.9 Cookies
+### 1.9 Cookies (unauth)
 
 `curl -s -D - -o /dev/null http://<host>:<port>/ | grep -i '^Set-Cookie:' || echo "NO_COOKIES"`
 
@@ -326,7 +326,7 @@ Route on assessment:
 - Value is opaque (long random-looking, no discernible format) → log informational, 1.10
 - `NO_COOKIES` → 1.10
 
-### 1.10 Upload surface
+### 1.10 Upload surface (unauth)
 
 `curl -s http://<host>:<port>/ | grep -oiE '<input[^>]*type=["'"'"']?file' || echo "NO_FILE_INPUT_HOMEPAGE"`
 
@@ -367,7 +367,7 @@ printf '[step5-sweep] DEFERRED: <marker>: <location>\n' >> route_<ip>.txt
 
 Nothing observed → 1.13.
 
-### 1.13 Visible admin/dashboard links
+### 1.13 Visible admin/dashboard links (unauth)
 
 Browse for visible links to `/admin`, `/dashboard`, `/settings`, `/manage`, `/console`. Also:
 
