@@ -29,7 +29,7 @@ Yields: arrow keys, basic tab completion (filenames, commands by PATH), working 
 
 ## Full — Ctrl+C handling, terminal size, and TERM setup
 
-Before backgrounding, capture attacker's terminal size:
+Capture **attacker's** terminal size:
 
 `stty size`
 
