@@ -145,10 +145,11 @@ Route on output markers:
 1. [[History Files]]
 2. [[Config Files]]
 3. [[SSH Keys]]
-4. [[Process cmdline & environ]] — *stub; skip. Build canonically when first encountered in the wild — walkthrough + `~/scripts/proc_argenv_enum.sh` covering `/proc/*/cmdline` and `/proc/*/environ`, parallel to History Files / Config Files / SSH Keys.*
-5. [[Process Memory Dumping]] — *stub; skip. Walkthrough not built — see [[Process Memory Dumping Walkthrough]] design note; deferred to build-when-encountered.*
+4. [[Loose Creds]]
+5. [[Process cmdline & environ]] — *stub; skip. Build canonically when first encountered in the wild — walkthrough + `~/scripts/proc_argenv_enum.sh` covering `/proc/*/cmdline` and `/proc/*/environ`, parallel to History Files / Config Files / SSH Keys.*
+6. [[Process Memory Dumping]] — *stub; skip. Walkthrough not built — see [[Process Memory Dumping Walkthrough]] design note; deferred to build-when-encountered.*
 
-All five exhausted with no elevation → proceed to Step 5.
+All six exhausted with no elevation → proceed to Step 5.
 
 ---
 

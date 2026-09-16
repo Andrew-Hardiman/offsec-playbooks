@@ -91,6 +91,7 @@ For each remaining row where the version number is missing (product name only, p
 | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `http`, `https`, `http-proxy`, `http-alt`                | `curl -sI http://<ip>:<port>` <br><br>then `whatweb -a 3 http://<ip>:<port>` <br><br>If both silent: <br>`nikto -host <ip> -port <port> -Tuning b`                                                                                                                           |
 | `ssh`                                                    | `nc <ip> 22` <br><br>Banner arrives instantly (format: `SSH-<proto>-<software>`). `Ctrl+C` once you see it — `nc` will hang waiting for `SSH` handshake otherwise. Extract clean software version manually if banner contains junk (e.g. CTF flag that broke nmap's parser). |
+| `irc`                                                    | `printf 'NICK probe\r\nUSER probe 0 * :probe\r\nQUIT\r\n' \| nc -w 10 <ip> <port>` <br><br>Version appears in numerics `002` (`Your host is <server>, running version <version>`) and `004` (`<server> <version> <umodes> <chanmodes>`). Extract the version string.         |
 | `ftp`                                                    | STUB (YOU NEED TO WRITE THIS)                                                                                                                                                                                                                                                |
 | `tcpwrapped`                                             | `nc -nv <ip> <port>`<br># Ctrl+C after ~5s if silent<br><br>`curl -sI http://<ip>:<port>`<br><br>`curl -skI https://<ip>:<port>`                                                                                                                                             |
 | `netbios-ssn` `microsoft-ds` `msrpc` <br>`ms-wbt-server` | Leave as-is — OS-keyed, routes via Lookup C and Pass 3 per-service workflow                                                                                                                                                                                                  |
@@ -113,7 +114,6 @@ Unresolved gaps stay as-is and fall through to Step 6.
 ```bash 
 for f in services_*.nmap; do [ -f "$f" ] || continue; ip=$(echo "$f" | grep -oP '\d+\.\d+\.\d+\.\d+'); grep -E "OS details:|Aggressive OS guesses:|Running:|OS CPE:" "$f" > os_${ip}.txt; echo "=== os_${ip}.txt ===" && cat os_${ip}.txt; done
 ```
-
 ## Step 5 — Decision
 
 → Services and/or versions detected on any host — proceed to [[Step 6. Vulnerability Analysis]] with the appropriate **Carry-forward artefacts**.

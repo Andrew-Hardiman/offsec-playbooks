@@ -16,7 +16,6 @@ Paste into target shell.
 Route on output markers:
 
 - `CONFIG_CRED[<file>]: <line_number>: <line>` → credential pattern hit. Multiple lines may appear across same and different files. Each is a candidate. → Proceed to Step 2 with the candidate list.
-- `CONFIG_FOUND: <file>` → informational; script scanned this file, no credential pattern matched. No action (**delete** or ignore these lines if you wish).
 - `CONFIG_EMPTY` → no readable config files exist. Technique inapplicable. Return to [[Linux Privilege Escalation Checksheet]] `Credential Harvesting`.
 - No `CONFIG_CRED` markers in output → script found no creds in any config file. Return to [[Linux Privilege Escalation Checksheet]] `Credential Harvesting`.
 
@@ -26,14 +25,14 @@ Route on output markers:
 
 For each candidate from Step 1, identify its **Cred type** by matching `<line>` against the table. Table rows, handler sections, and processing order are all the same (priority order — yield × speed): process all candidates of the first row's type, then the second row's, etc.
 
-| Cred type          | Signature in `<line>`                                                                                                                                                                                         |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Key=value password | Default — `any line not matching one of the patterns below; key-name + value in INI, YAML, JSON, PHP, TXT` OR command flag type format (e.g `-p password`) OR `key = /path/to/key/or/auth/file` pattern, etc. |
-| PEM private key    | Contains `-----BEGIN [A-Z ]+PRIVATE KEY-----`                                                                                                                                                                 |
-| pgpass entry       | `<host>:<port>:<db>:<user>:<password>` (four colons, often with `*` wildcards)                                                                                                                                |
-| htpasswd hash      | `<user>:<hash>` (one colon + hash prefix `$apr1$`, `$2y$`, `$1$`, `$5$`, `$6$`, or `{SHA}`)                                                                                                                   |
-| URL-embedded       | Contains `<scheme>://<user>:<pass>@<host>`                                                                                                                                                                    |
-| Service token      | Contains `ghp_`, `xox[bpas]-`, `sk_live_`, `sk_test_`, or `Bearer`                                                                                                                                            |
+| Cred type          | Signature in `<line>`                                                                                                                                                                                                                                                                                                                     |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Key=value password | Default — `any line not matching one of the patterns in the below rows`: <br><br>`key-name + value` in any `INI, YAML, JSON, PHP, TXT, CNF`  <br><br>OR<br><br>command flag type format (e.g `-p password`) <br><br>OR<br><br>`key = /path/to/key/or/auth/file` pattern, etc. <br><br>OR <br><br>`private_key   = $dir/private/cakey.pem` |
+| PEM private key    | Contains `-----BEGIN [A-Z ]+PRIVATE KEY-----`                                                                                                                                                                                                                                                                                             |
+| pgpass entry       | `<host>:<port>:<db>:<user>:<password>` (four colons, often with `*` wildcards)                                                                                                                                                                                                                                                            |
+| htpasswd hash      | `<user>:<hash>` (one colon + hash prefix `$apr1$`, `$2y$`, `$1$`, `$5$`, `$6$`, or `{SHA}`)                                                                                                                                                                                                                                               |
+| URL-embedded       | Contains `<scheme>://<user>:<pass>@<host>`                                                                                                                                                                                                                                                                                                |
+| Service token      | Contains `ghp_`, `xox[bpas]-`, `sk_live_`, `sk_test_`, or `Bearer`                                                                                                                                                                                                                                                                        |
 
 All candidates exhausted with no root yield → return to [[Linux Privilege Escalation Checksheet]] `Credential Harvesting`.
 
@@ -45,7 +44,7 @@ All candidates exhausted with no root yield → return to [[Linux Privilege Esca
 
 `cat <path>` on target. 
 
-(If `<path>` uses a `$<var>` — e.g. `$dir/private/cakey.pem`, then you must resolve `<var>`  from `<file>` first: `grep -iE '^[[:space:]]*<var>[[:space:]]*=' <file>` → use resolved `<var>` to construct literal/absolute `<path>` → if `grep` returned no output, then there was no `<var>` resolution → next candidate)
+(If `<path>` uses a `$<var>` — e.g. `$dir/private/cakey.pem`, then you must resolve `<var>`  from `<file>` first: `grep -iE '^[[:space:]]*<var>[[:space:]]*=' <file>` → use resolved `<var>` to construct literal/absolute `<path>` → if `grep` returned no output, then there was **no `<var>` resolution → next candidate**)
 
 Branch by output:
 
