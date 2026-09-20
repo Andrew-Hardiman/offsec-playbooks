@@ -1,7 +1,7 @@
 
 > **STATUS: PARTIAL AUDIT** — Sub-block 1 (Authenticated surface enumeration) first-principles derived with OWASP WSTG / PortSwigger / bug-bounty consultation; live-validated on THM:Guided Pentest: Web across multiple iterations. Sub-blocks 2, 4, 5, 6, 8, 10 restructured to self-filter design (per Option B) but not full V_S audit — no primary-source review per technique, no sandbox verification, no live-validation. Sub-blocks 3, 7, 9 unaudited (retain original scaffolding shape). Last partial audit: 2026-09-09.
 
-Enumerates and exploits the attack surface exposed only under authentication. Distinct attack techniques and route dispositions from unauth (WAC) Steps 1-5.
+Enumerates and exploits the attack surface exposed only under authentication. Distinct attack techniques and route dispositions from unauth (WAC) Steps 1-6.
 
 ## Return contract
 
@@ -118,7 +118,7 @@ while read p; do
 done < auth_paths_<host>.txt
 ```
 
-For each hit, submit a marker value (`STORED_MARKER_ZZZ`); retrieve the target page in subsequent GET; if marker appears, `STORED_SURFACE` confirmed. Append DEFERRED entries per [[Web Attack Checksheet#1.12 Low-EV input surfaces|WAC 1.12]] pattern.
+For each hit, submit a marker value (`STORED_MARKER_ZZZ`); retrieve the target page in subsequent GET; if marker appears, `STORED_SURFACE` confirmed. Append DEFERRED entries per [[Web Attack Checksheet#2.12 Low-EV input surfaces|WAC 2.12]] pattern.
 
 ## 7. Gobuster dir (authed)
 

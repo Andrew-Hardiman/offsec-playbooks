@@ -226,8 +226,8 @@ done < users_<host>.txt
 
 Route:
 
-- Any ffuf result OR `SUCCESS $U:$P` line (all *candidates*, not confirmed) → verify manually → confirmed → Section 6; false positive → discard, next candidate; on exhaustion → CeWL pass, then return to WAC after 1.14
-- All combinations exhausted → return to [[Web Attack Checksheet]] sub-block after 1.14
+- Any ffuf result OR `SUCCESS $U:$P` line (all *candidates*, not confirmed) → verify manually → confirmed → Section 6; false positive → discard, next candidate; on exhaustion → CeWL pass, then return to [[Web Attack Checksheet]]
+- All combinations exhausted → return to [[Web Attack Checksheet]]
 
 ---
 

@@ -120,6 +120,7 @@ Append discovered identifiers to accumulators:
 - Emails / usernames / employee IDs → `users_<host>.txt` (per WAC Username accumulator convention). One entry per line: `echo '<identifier>' >> users_<host>.txt`
 - Credentials → `creds_<host>.txt` if any leaked
 - Role / admin flags → note in `route_<ip>.txt` alongside the identifier (e.g. `IDOR_ADMIN: s.mitchell@recruitx.thm (id=1, role=administrator)`) — flags priority targets for the accumulator re-fire consumers
+- Browser hides page content (paywall overlay, "premium" blocker, modal, JS-hidden element) → [[Reveal Client-Hidden Content]] to reveal server-sent content before extracting identifiers
 
 Record the hit for sub-block 7:
 
