@@ -80,8 +80,59 @@ Expected format:
 53/open/udp/-/-
 ```
 
+## Step 3 — Resolve service-identity gaps
 
-## Step 3 — Resolve version gaps
+Confirm the true identity of any open TCP service nmap left unconfirmed. Resolve identity here, before version resolution.
+
+### Step 3.1 — Detect uncertain-identity rows
+
+Lists every open TCP service whose identity nmap did not confirm: service field ends in `?` (no/low-confidence match), is `unknown`, or is blank (`-`). UDP, `filtered`, and `tcpwrapped` rows are excluded by design (`tcpwrapped` is handled in Step 4).
+
+```bash
+for f in services_*.txt; do [ -f "$f" ] || continue; ip=$(echo "$f" | grep -oP '\d+\.\d+\.\d+\.\d+'); echo "=== $ip ==="; awk -F/ '$3=="tcp" && ($2=="open" || $2=="open|filtered") && ($4 ~ /\?$/ || $4=="unknown" || $4=="-")' "$f"; done
+```
+
+- No rows returned → Step 4.
+- Rows returned → resolve each one below (`<ip>` / `<port>` from the row).
+
+### Step 3.2 — Decode the captured fingerprint (do this first)
+
+nmap already captured the service's raw probe responses in `services_<ip>.nmap`. Decode them into readable form with suggested field values:
+
+```bash
+~/scripts/nmap_fp_decode.py services_<ip>.nmap <port>
+```
+
+Script unavailable (unsynced box): `sed -n '/^SF-Port<port>-TCP:/,/");[[:space:]]*$/p' services_<ip>.nmap` prints the raw block to read by eye.
+
+Route on the trailing `FIELD 4 (service):` line:
+
+- `<service>` (not `UNKNOWN`) → identity resolved. Step 3.4 with the printed field 4 (and field 5 if not `-`).
+- `UNKNOWN` → read the decoded probe responses printed above. The identifying response is the one carrying an `HTTP/` status line or a protocol banner, not nmap's `400 Bad Request` rejection probes. Identify by eye → Step 3.4; can't → Step 3.3.
+- `NO_FINGERPRINT: ...` → no fingerprint was captured → Step 3.3.
+
+### Step 3.3 — Active probe (only when 3.2 was absent or inconclusive)
+
+```bash
+curl -sI http://<ip>:<port>        # HTTP response headers returned → http
+curl -skI https://<ip>:<port>      # if plaintext returned nothing → https
+nc -nv <ip> <port>                 # Ctrl+C after ~5s; capture any banner for a non-HTTP service
+```
+
+- A response identifies the service → Step 3.4.
+- No response / still unidentifiable → leave the row unchanged; it falls through to [[Step 6. Vulnerability Analysis]] as-is. Next row.
+
+### Step 3.4 — Record identity
+
+Manually edit the row in `services_<ip>.txt`: set field 4 (service) to the confirmed nmap service name. If 3.2/3.3 also revealed a product or version, set field 5 too; otherwise leave `-` for Step 4 to resolve.
+
+```
+Before: 3001/open/tcp/nessus?/-
+After:  3001/open/tcp/http/Next.js
+```
+
+Edited rows enter Step 4 (Resolve version gaps) keyed on the service you just set.
+## Step 4 — Resolve version gaps
 
 Read each `services_<ip>.txt`. Ignore rows where **both** service and version are `-` (nmap got nothing — no probe target). 
 
@@ -105,16 +156,16 @@ Before: 80/open/tcp/http/lighttpd
 After:  80/open/tcp/http/lighttpd 1.4.55
 ```
 
-Unresolved gaps stay as-is and fall through to Step 6.
+Unresolved gaps stay as-is and fall through to [[Step 6. Vulnerability Analysis]].
 
 ⚠️ UDP version detection is **not** handled here — Step 1 runs TCP-only. Flagged as a future consideration: if UDP version gaps prove valuable in real engagements, extend Step 1's nmap to include `-sU -sV` or add a UDP-specific version step.
 
-## Step 4 — Extract OS detection output 
+## Step 5 — Extract OS detection output 
 
 ```bash 
 for f in services_*.nmap; do [ -f "$f" ] || continue; ip=$(echo "$f" | grep -oP '\d+\.\d+\.\d+\.\d+'); grep -E "OS details:|Aggressive OS guesses:|Running:|OS CPE:" "$f" > os_${ip}.txt; echo "=== os_${ip}.txt ===" && cat os_${ip}.txt; done
 ```
-## Step 5 — Decision
+## Step 6 — Decision
 
 → Services and/or versions detected on any host — proceed to [[Step 6. Vulnerability Analysis]] with the appropriate **Carry-forward artefacts**.
 

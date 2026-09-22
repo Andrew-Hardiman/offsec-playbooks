@@ -1,4 +1,4 @@
-> **STATUS: FORMAT-ONLY** — three-set structural restructure applied 2026-09-19; Step 6 (Active content discovery) fully first-principles + primary-source audited 2026-09-19; remaining sub-blocks structurally reshaped from pre-audit state, per-sub-block first-principles derivation INCOMPLETE. Live-validation pending. Not CANONICAL.
+> **STATUS: FORMAT-ONLY** — three-set structural restructure applied 2026-09-19; Step 6 (Active content discovery) fully first-principles + primary-source audited (6.1 2026-09-19, 6.2 2026-09-22); remaining sub-blocks structurally reshaped from pre-audit state, per-sub-block first-principles derivation INCOMPLETE. Live-validation pending. Not CANONICAL.
 
 Routes HTTP/HTTPS service to web attack technique walkthroughs. Pure router — attack content lives in per-technique files.
 
@@ -216,13 +216,10 @@ Route on output:
 
 `curl -s -D - -o /dev/null "http://<host>:<port>/" | grep -i '^Set-Cookie:' || echo "NO_COOKIES"`
 
-For each `Set-Cookie` value, assess format.
+Route on output:
 
-Route on assessment:
-
-- Value is plain (e.g. `admin=false`, `user_id=1`), base64 (e.g. `eyJ...`, decodes with `base64 -d`), or hex hash (32/40/64 chars) → [[Session Cookie Attacks]]
-- Value is opaque (long random-looking, no discernible format) → log informational
-- `NO_COOKIES` → continue to Step 3
+- One or more `Set-Cookie` values present → [[Session Cookie Attacks]]
+- `NO_COOKIES` → continue to Step 3.
 
 ---
 
@@ -519,7 +516,7 @@ Route on output:
 
 ## Step 6 — Active content discovery
 
-> **STATUS (this step): AUDITED** — first-principles + primary-source derivation (OWASP WSTG-INFO-04/06, PortSwigger Content Discovery, HackTricks Directory Brute Force, PayloadsAllTheThings, feroxbuster/gobuster/SecLists docs); sandbox-verified inspection mechanics (autoindex detection, credential grep, endpoint grep, href extraction, output-format parsing); tool-flag correctness verification-pending until first live run; live-validation on ≥1 real target pending. Not yet CANONICAL.
+> **STATUS (this step): AUDITED** — first-principles + primary-source derivation. 6.1: OWASP WSTG-INFO-04/06, PortSwigger Content Discovery, HackTricks Directory Brute Force, PayloadsAllTheThings, feroxbuster/gobuster/SecLists docs. 6.2: OWASP WSTG API Reconnaissance, SecLists api-endpoints.txt, GraphQL introspection. Sandbox-verified mechanics — 6.1: autoindex/credential/endpoint/href/output parsing; 6.2: jq spec-parse (OpenAPI-3 servers + Swagger-2 basePath prefixing, HTML-UI rejection), GraphQL introspection detection, content-type JSON classification. Tool-flag correctness (feroxbuster/gobuster/jq/curl) verification-pending until first live run; live-validation on ≥1 real target pending. Not yet CANONICAL.
 
 Actively enumerate paths the app didn't advertise. Two mechanisms: recursive wordlist enumeration (6.1) and API endpoint enumeration (6.2). All hits append to `unauth_paths_<host>.txt` — re-fire at Step 6 boundary dispatches Basic Recon (Step 3) and Auth-form Per-path processing (Step 4).
 
@@ -546,7 +543,7 @@ Select extension set per server-side stack identified in Step 2 (Version-discove
 - **Stack unknown** (wide-net fallback):
   `feroxbuster -u "http://<host>:<port>" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,aspx,jsp,html,txt,js,json,bak,log,conf,inc,env,old,orig,py -d 4 -o feroxbuster_<ip>_<port>.txt`
 
-`-d 4` caps recursion depth. Feroxbuster default surfaces 200/204/301/302/307/308/401/403/405 and excludes 404.
+`-d 4` caps recursion depth. Feroxbuster shows all status codes; it suppresses the not-found wall by auto-building a wildcard filter from that response's signature (lines/words/chars) — the `… created new filter` lines are this calibration, not findings. Any response deviating from the signature (a non-404, or a 404 of a different size) is shown.
 
 **Overlays:**
 - ⚠️ Rate-limit (real engagement, WAF suspected): append `-t 5 --rate-limit 10` (5 threads, 10 req/sec) ⚠️.
@@ -634,29 +631,79 @@ Then → 6.2.
 
 ### 6.2 API endpoint enumeration
 
-Convention path list including documentation endpoints (high-yield):
+> ⚠️ **Brute has a categorical blind spot: deep, custom, sparsely-routed endpoints.** A path that isn't a literal wordlist entry and whose parents 404 (recursion can't reach it — `--force-recursion` included) is never requested — a property of the technique, not a tuning gap. Recover such paths from what the app discloses (spec/GraphQL `(c)`/`(d)`, client code, observed traffic, source/error leaks, authed view) or via `ffuf` positional fuzz off a known prefix.
+> **Tripwire:** first time a known/suspected endpoint won't surface → log `DEFERRED: api-discovery-blindspot: <detail>` in `route_<ip>.txt`, work around it, move on. Second occurrence → build the fix; do not ignore it again.
+> Full derivation + deferred-build decision: [[API Endpoint Discovery - Brute-Force Limits]]
 
-`for p in /api /api/users /api/users/admin /api/messages /api/messages/admin /api/chats /api/admin /api/v1 /api/v2 /api/v3 /graphql /graphql/console /graphiql /playground /rest /rest/v1 /rest/v2 /swagger /swagger-ui /swagger-ui/ /swagger.json /swagger.yaml /openapi.json /openapi.yaml /api-docs /docs; do status=$(curl -s -o /dev/null -w "%{http_code}" "http://<host>:<port>${p}"); [ "$status" = "404" ] && continue; ctype=$(curl -sI "http://<host>:<port>${p}" | grep -i '^content-type:' | tr -d '\r'); echo "=== ${p} (status=${status}, ${ctype}) ==="; curl -s "http://<host>:<port>${p}" | head -c 500; echo; echo "$p" >> unauth_paths_<host>.txt; done`
+#### feroxbuster invocation:
 
-Per-hit follow-up — three small commands:
+`feroxbuster -u "http://<host>:<port>" -w /usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt -d 4 -o feroxbuster_api_<ip>_<port>.txt`
 
-**(a) JSON API detection:**
+`-d 4` caps recursion depth. Feroxbuster shows all status codes; it suppresses the not-found wall by auto-building a wildcard filter from that response's signature (lines/words/chars) — the `… created new filter` lines are this calibration, not findings. Any response deviating from the signature (a non-404, or a 404 of a different size) is shown.
 
-`for p in /api /api/users /api/users/admin /api/messages /api/messages/admin /api/chats /api/admin /api/v1 /api/v2 /api/v3 /graphql /rest /rest/v1 /rest/v2; do curl -sI "http://<host>:<port>${p}" | grep -qi '^content-type:.*application/json' && echo "JSON_API: $p" >> route_<ip>.txt; done`
+**Overlays:**
+- ⚠️ Rate-limit (real engagement, WAF suspected): append `-t 5 --rate-limit 10` (5 threads, 10 req/sec).
+- Same-length / soft-404 noise (server returns 200 for missing paths): `--auto-tune` / `--auto-bail` handles most; manual `-C <length>` filters a specific response length.
 
-**(b) Swagger / OpenAPI extraction — pulls full API surface in one hit:**
+⚠️ **Stack-conditional doc paths** — only if Step 2 fingerprinted the stack. Probe the matching stack's path(s); any 200 → append the URL to `hits_api_<ip>_<port>.txt` and run (c) against it.
 
-`for p in /swagger.json /swagger.yaml /openapi.json /openapi.yaml /api-docs; do body=$(curl -s "http://<host>:<port>${p}"); echo "$body" | head -c 100 | grep -qE '"(swagger|openapi)"' && { echo "SWAGGER_EXTRACT: $p" >> route_<ip>.txt; echo "$body" | grep -oE '"/[^"]+"' | tr -d '"' | sort -u >> unauth_paths_<host>.txt; }; done`
+- Java/Spring → `/v2/api-docs`, `/v3/api-docs`
+- .NET → `/swagger/v1/swagger.json`
 
-**(c) Auth-gated API detection:**
+#### Gobuster fallback — if feroxbuster unavailable:
 
-`for p in /api /api/v1 /api/v2 /graphql; do status=$(curl -s -o /dev/null -w "%{http_code}" "http://<host>:<port>${p}"); case "$status" in 401|403) auth_hint=$(curl -s "http://<host>:<port>${p}" | grep -oiE '(Bearer|JWT|OAuth|API-Key)' | sort -u | head -1); echo "AUTH_GATED_API: $p (status=$status, auth=$auth_hint)" >> route_<ip>.txt ;; esac; done`
+`gobuster dir -u "http://<host>:<port>" -w /usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt -o gobuster_api_<ip>_<port>.txt`
+
+Gobuster does NOT recurse. For every 200/301/302 hit on a directory-shape path (`/api`, `/api/v1`, …), manually re-invoke against it:
+`gobuster dir -u "http://<host>:<port>/<discovered_dir>/" -w /usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt -o gobuster_api_<ip>_<port>_<slug>.txt`
+
+#### Per-hit processing:
+
+##### (a) Extract hit URLs to a working file:
+
+`awk '/^[0-9]{3}[[:space:]]/ {print $NF}' feroxbuster_api_<ip>_<port>.txt | sort -u > hits_api_<ip>_<port>.txt`
+
+##### (b) Add every hit path to `unauth_paths_<host>.txt`:
+
+`sed -E "s|^https?://<host>(:<port>)?||" hits_api_<ip>_<port>.txt >> unauth_paths_<host>.txt && sort -u unauth_paths_<host>.txt -o unauth_paths_<host>.txt`
+
+##### (c) Spec-doc parse — pull the full documented API surface from any OpenAPI/Swagger spec in one hit:
+
+`grep -iE '/(swagger|openapi|api-docs|v[23]/api-docs)' hits_api_<ip>_<port>.txt | sort -u | while read u; do spec=$(curl -s -H 'Accept: application/json' "$u"); if echo "$spec" | jq -e 'has("openapi") or has("swagger")' >/dev/null 2>&1; then echo "SPEC_FOUND: $u"; echo "$spec" | jq -r '((.servers[0].url // "") | sub("^https?://[^/]+";"")) as $s | (if $s != "" then $s else (.basePath // "") end) as $b | .paths | keys[] | $b + .' 2>/dev/null >> unauth_paths_<host>.txt; ver=$(echo "$spec" | jq -r '.info.version // empty' 2>/dev/null); [ -n "$ver" ] && echo "SPEC_VERSION: $u: $ver"; else case "$u" in *.yaml|*.yml) echo "SPEC_YAML_MANUAL: $u";; *) echo "NOT_SPEC: $u";; esac; fi; done`
 
 Route per marker:
 
-- `JSON_API: <path>` → real API surface. Path added to `unauth_paths_<host>.txt`; Basic Recon 3.3 URL parameters finds query params via re-fire. JSON body may reveal numeric/UUID IDs → route to [[IDOR]] via re-fire.
-- `SWAGGER_EXTRACT: <path>` → all documented endpoints extracted and appended to `unauth_paths_<host>.txt`. Huge yield for one hit.
-- `AUTH_GATED_API: <path> (auth=Bearer|JWT|OAuth|API-Key)` → JWT/Bearer visible → route to [[Session Cookie Attacks]] (JWT tampering branch). Otherwise: note for later credential re-use.
+- `SPEC_FOUND: <url>` → every documented endpoint (server/basePath-prefixed) appended to `unauth_paths_<host>.txt`; re-fire at the Step 6 boundary dispatches Basic Recon (Step 3) + Auth-form processing (Step 4) over each. Highest yield in 6.2 — one hit, full surface.
+- `SPEC_VERSION: <url>: <version>` → apply **Version-discovery route**.
+- `SPEC_YAML_MANUAL: <url>` → jq parses JSON only; read the YAML spec by eye and append its `paths:` entries to `unauth_paths_<host>.txt` manually.
+- `NOT_SPEC: <url>` → 200 but not a real spec document (usually the Swagger-UI HTML shell, not its backing JSON) → no action; the UI's spec is a separate hit.
+
+##### (d) GraphQL detection → route:
+
+`grep -iE '/(graphql|graphiql|playground)' hits_api_<ip>_<port>.txt | sort -u | while read u; do tn=$(curl -s -H 'Content-Type: application/json' -d '{"query":"{__typename}"}' "$u" | jq -r '.data.__typename // empty' 2>/dev/null); [ -z "$tn" ] && continue; curl -s -H 'Content-Type: application/json' -d '{"query":"{__schema{queryType{name}}}"}' "$u" | jq -e '.data.__schema' >/dev/null 2>&1 && intro=on || intro=off; p=$(echo "$u" | sed -E "s|^https?://<host>(:<port>)?||"); echo "GRAPHQL: $p (introspection=$intro)"; done`
+
+Route per marker:
+
+- `GRAPHQL: <path> (introspection=on)` → schema is fully dumpable → [[GraphQL Attacks]] (introspection dump + query/mutation abuse).
+- `GRAPHQL: <path> (introspection=off)` → confirmed GraphQL, introspection disabled → [[GraphQL Attacks]] (field-suggestion / clairvoyance path).
+
+##### (e) Auth-gated endpoint detection → route:
+
+`awk '/^(401|403)[[:space:]]/ {print $NF}' feroxbuster_api_<ip>_<port>.txt | sort -u | while read u; do hint=$(curl -s -D - -o /dev/null "$u" | grep -oiE '(Bearer|JWT|OAuth|API-?Key)' | sort -u | head -1); p=$(echo "$u" | sed -E "s|^https?://<host>(:<port>)?||"); echo "AUTH_GATED_API: $p (auth=${hint:-none})"; done`
+
+Route per marker:
+
+- `AUTH_GATED_API: <path> (auth=Bearer|JWT)` → token-based auth → [[Session Cookie Attacks]] (JWT branch).
+- `AUTH_GATED_API: <path> (auth=OAuth|API-Key|none)` → note the path for credential re-use once creds are recovered downstream.
+
+##### (f) JSON API detection → route:
+
+`grep -vE '/(swagger|openapi|api-docs|graphql|graphiql|playground)' hits_api_<ip>_<port>.txt | sort -u | while read u; do meta=$(curl -s -o /dev/null -w '%{http_code} %{content_type}' -H 'Accept: application/json' "$u"); code=${meta%% *}; case "$code" in 2*) ;; *) continue;; esac; echo "$meta" | grep -qi json || continue; p=$(echo "$u" | sed -E "s|^https?://<host>(:<port>)?||"); ids=$(curl -s -H 'Accept: application/json' "$u" | grep -oiE '"[a-z_]*(id|uuid|guid)"[[:space:]]*:[[:space:]]*"?[0-9a-fA-F-]+"?' | head -3 | tr '\n' ' '); echo "JSON_API: $p${ids:+ | ids: $ids}"; done`
+
+Route per marker:
+
+- `JSON_API: <path>` → live JSON endpoint. Fuzz its query/body parameters → [[Injection]]; enumerate accepted methods (`curl -s -i -X OPTIONS "http://<host>:<port><path>" | grep -i '^allow:'`) and exercise any write method returned (POST/PUT/PATCH/DELETE).
+- `JSON_API: <path> | ids: ...` → sequential-integer or UUID identifiers in the body → [[IDOR]] (increment integers; enumerate/swap UUIDs), and test path-segment IDs directly: `/…/<n>` → `/…/<n±1>`.
 
 ---
 
