@@ -281,22 +281,22 @@ Enumerate every input the app exposes — URL query parameters and HTML form con
 
 Batch both scripts over the master path list:
 
-`~/scripts/url_params_enum.py --base http://<host>:<port> --paths unauth_paths_<host>.txt [--verbose]`
+`~/scripts/url_params_enum.py --base http://$host:$port --paths unauth_paths_$host.txt --verbose >> url_params_$host.txt`
 
-`~/scripts/form_enum.py --base http://<host>:<port> --paths unauth_paths_<host>.txt [--verbose]`
+`~/scripts/form_enum.py --base http://$host:$port --paths unauth_paths_$host.txt --verbose >> form_enum_$host.txt`
+
+⚠️ **JS-tripwire:** `form_enum.py` flags pages whose forms may be JS-built (they won't appear in its output). If a form visible in the browser is missing from the output, capture it from HAR/Burp and route it manually.
+
+### 4.2 Route candidates (highest-EV first)
+
+Collect all `ROUTE_CANDIDATE` / `UPLOAD_CANDIDATE` lines from both scripts. Route each by param name, then by value shape (URL params carry `[url/<shape>]`; form fields route by name / control type). 
 
 Marker formats:
 
 - `url_params_enum.py` → `ROUTE_CANDIDATE: GET <endpoint> <param> [url/<shape>]` — `<shape>` ∈ `{EMPTY, URLISH, NUMERIC, HEXHASH, PATHISH, OPAQUE}`
 - `form_enum.py` → `ROUTE_CANDIDATE: <method> <action> <param> [<control>]` and `UPLOAD_CANDIDATE: <action> <param>`, grouped under `FORM #<n>` headers — `<control>` ∈ `{input/<type>, textarea, select}`
 
-Also inspect Burp Proxy history for XHR/fetch requests carrying parameters — JS-built requests are absent from static HTML, so neither script sees them.
-
-⚠️ **JS-tripwire:** `form_enum.py` flags pages whose forms may be JS-built (they won't appear in its output). If a form visible in the browser is missing from the output, capture it from HAR/Burp and route it manually.
-
-### 4.2 Route candidates (highest-EV first)
-
-Collect all `ROUTE_CANDIDATE` / `UPLOAD_CANDIDATE` lines from both scripts. Route each by param name, then by value shape (URL params carry `[url/<shape>]`; form fields route by name / control type). Walk in this order:
+Walk in this order:
 
 1. `UPLOAD_CANDIDATE: <action> <param>` → [[File Upload]]
 2. name ∈ {`file`, `page`, `include`, `template`, `lang`, `doc`} OR shape `PATHISH` → [[Local File Inclusion]], then [[Remote File Inclusion]], then [[Path Traversal]]
