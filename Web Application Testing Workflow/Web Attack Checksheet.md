@@ -569,7 +569,10 @@ Select extension set per server-side stack identified in Step 2 (Version-discove
 For each `AUTOINDEX: <url>` line, record to `route_<ip>.txt`.
 ##### (d) High-value config-shape file inspection — `.env`, `.htaccess`, `web.config`, `phpinfo`, `.log`:
 
-`grep -E '(\.env|\.htaccess|web\.config|phpinfo|\.log)$|/\.env$|/phpinfo\.php$' hits_<ip>_<port>.txt | while read u; do echo "=== $u ==="; out=$(curl -s -L "$u" | grep -oiE '(password|passwd|secret|api[_-]?key|token|bearer)\s*[:=]\s*["'"'"']?[^"'"'"'[:space:]]+'); if [ -n "$out" ]; then echo "$out" | while read c; do echo "FILE_CRED: $u: $c"; done; else echo "NO_CRED_PATTERN — high-value file, MANUAL REVIEW ADVISED (curl -s -L \"$u\")"; fi; done`
+> ⚠️ **STOP — 3 iterations deep; do not hand-amend this command again.** Its correctness is not confirmable on read (cred regex + `'"'"'` shell-escaping — both have broken under inline review). A 4th amend **is the escalation trigger**: build a typed Python script in `~/scripts/` with a `test_<name>.py` regression suite (Language Selection — attacker-side), and route this block to consume its markers. > **Build spec — preserve all current value; these are additions, not a redesign.** Keep every marker and route in the "Route per marker" block below exactly: FILE_CRED → placeholder-verify → `creds_<host>.txt` + `route_<ip>.txt` audit log; NO_CRED_PATTERN → manual review for stack traces, paths, framework hints, usernames. Add: (1) manual review is a leaf on BOTH branches — the file is high-value by *selection*, not by match; the regex highlights, it does not exhaust. (2) Fetch failure (404/403/5xx/empty/timeout) is its own outcome — capture HTTP status — not folded into NO_CRED_PATTERN; manual review applies only to successfully-fetched files. > **One script covers (d) + (e) — read BOTH notes' build specs before building; neither is the full spec alone. (e)'s note adds the `ENDPOINT_REF` extractor (→ `unauth_paths_<host>.txt`, re-fires at the Step 7 boundary) that this block has no equivalent of.**
+> **Full design → [[Local File & Tree Inspector]]** (Design Notes) — the deferred shared inspector this escalates to; supersedes the inline build-spec summary above.
+
+`grep -E '(\.env|\.htaccess|web\.config|phpinfo|\.log)$|/\.env$|/phpinfo\.php$' hits_<ip>_<port>.txt | while read u; do echo "=== $u ==="; out=$(curl -s -L "$u" | grep -oiE '(password|passwd|secret|api[_-]?key|token|bearer)[A-Za-z0-9._-]*["'"'"']?\s*[:=]\s*["'"'"']?[^"'"'"'[:space:]]+'); if [ -n "$out" ]; then echo "$out" | while read c; do echo "FILE_CRED: $u: $c"; done; else echo "NO_CRED_PATTERN — high-value file, MANUAL REVIEW ADVISED (curl -s -L \"$u\")"; fi; done`
 
 Route per marker:
 
@@ -579,13 +582,16 @@ Route per marker:
   - Log for audit trail: `echo 'FILE_CRED: <url>: <match>' >> route_<ip>.txt`
 - `NO_CRED_PATTERN` — grep found no cred pattern, but file is high-value:
   - Manually review with the ready-to-paste `curl` command shown in the marker output
-  - Look for stack traces, paths, framework hints, usernames — none of which the cred grep catches
+  - Look for stack traces, paths, framework hints, secrets, usernames — none of which the cred grep catches
   - If review yields credentials → `echo '<user>:<pass>' >> creds_<host>.txt`
   - If review yields nothing exploitable → no action; file was inspected, moving on
 
 ##### (e) High-value source-shape file inspection — `.js`, `.json`, `.bak`, `.old`, `.orig`, `.swp`, `~`:
 
-`grep -E '\.(js|json|bak|old|orig|swp)$|~$' hits_<ip>_<port>.txt | while read u; do echo "=== $u ==="; body=$(curl -s -L "$u"); creds=$(echo "$body" | grep -oiE '(password|passwd|secret|api[_-]?key|token|bearer)\s*[:=]\s*["'"'"'][^"'"'"']+'); eps=$(echo "$body" | grep -oiE '["'"'"']/(api|v[0-9]|admin|user|auth|login|internal)[^"'"'"']*["'"'"']' | tr -d '"'"'"); if [ -n "$creds" ]; then echo "$creds" | while read c; do echo "SRC_CRED: $u: $c"; done; fi; if [ -n "$eps" ]; then echo "$eps" | while read ep; do echo "ENDPOINT_REF: $u: $ep"; done; fi; if [ -z "$creds" ] && [ -z "$eps" ]; then echo "NO_PATTERN_MATCH — source-shape file, MANUAL REVIEW ADVISED for backup/source-disclosure content (curl -s -L \"$u\" | less)"; fi; done`
+> ⚠️ **STOP — 3 iterations deep; do not hand-amend this command again.** Its correctness is not confirmable on read (cred regex + endpoint regex + `'"'"'` shell-escaping). A 4th amend **is the escalation trigger**: build a typed Python script in `~/scripts/` with a `test_<name>.py` regression suite (Language Selection — attacker-side), and route this block to consume its markers. > **Build spec — preserve all current value; these are additions, not a redesign.** This block is a cred AND endpoint extractor — keep every marker and route in the "Route per marker" block below exactly: SRC_CRED → placeholder-verify → `creds_<host>.txt` + audit log; **ENDPOINT_REF → `unauth_paths_<host>.txt` (re-fires at the Step 7 boundary)**; NO_PATTERN_MATCH → review for `.bak/.old/.orig/.swp/~` source-disclosure, skim/skip for `.js/.json`. Add: (1) manual review is a leaf on EVERY fetch-success branch — cred-hit, endpoint-hit, both, and no-match — high-value by *selection*, not by match. (2) Fetch failure (404/403/5xx/empty/timeout) is its own outcome — capture HTTP status — not folded into NO_PATTERN_MATCH; manual review applies only to successfully-fetched files. > **One script covers (d) + (e) — read BOTH notes' build specs before building; neither is the full spec alone. (d)'s note carries the config-file cred checklist (stack traces / paths / framework hints / usernames), separate from this block's endpoint extraction.**
+> **Full design → [[Local File & Tree Inspector]]** (Design Notes) — the deferred shared inspector this escalates to; supersedes the inline build-spec summary above.
+
+`grep -E '\.(js|json|bak|old|orig|swp)$|~$' hits_<ip>_<port>.txt | while read u; do echo "=== $u ==="; body=$(curl -s -L "$u"); creds=$(echo "$body" | grep -oiE '(password|passwd|secret|api[_-]?key|token|bearer)[A-Za-z0-9._-]*["'"'"']?\s*[:=]\s*["'"'"'][^"'"'"']+'); eps=$(echo "$body" | grep -oiE '["'"'"']/(api|v[0-9]|admin|user|auth|login|internal)[^"'"'"']*["'"'"']' | tr -d '"'"'"); if [ -n "$creds" ]; then echo "$creds" | while read c; do echo "SRC_CRED: $u: $c"; done; fi; if [ -n "$eps" ]; then echo "$eps" | while read ep; do echo "ENDPOINT_REF: $u: $ep"; done; fi; if [ -z "$creds" ] && [ -z "$eps" ]; then echo "NO_PATTERN_MATCH — source-shape file, MANUAL REVIEW ADVISED for backup/source-disclosure content (curl -s -L \"$u\" | less)"; fi; done`
 
 Route per marker:
 
@@ -702,6 +708,39 @@ Route per marker:
 - `JSON_API: <path> | ids: ...` → sequential-integer or UUID identifiers in the body → [[IDOR]] (increment integers; enumerate/swap UUIDs), and test path-segment IDs directly: `/…/<n>` → `/…/<n±1>`.
 
 ---
+
+### 7.3 Archive / backup / dump discovery
+
+> **STATUS: AUDITED** — `archive_enum.py` first-principles derived; `mypy --strict` clean; 68/68 `test_archive_enum.py`; probe→classify→render mechanism sandbox-validated (magic / SQL-sniff / 403 / soft-404-suppression legs all exercised). Live-validation on a real box pending → promote to CANONICAL after THM `Web Server Attacks - I`.
+
+Surfaces archive / backup / dump **loot** (`backup.zip`, `<host>.tar.gz`, `db.sql`, `www.tar.gz`, …) that recursive wordlist brute (7.1) and API enum (7.2) do not target. Discovery only: confirms file identity (magic bytes / Content-Type) and **lists** — it does NOT download bodies, extract, or inspect contents.
+
+Run **after 7.1** so `--paths` consumes the directories 7.1 discovered.
+
+#### Invocation
+
+⚠️ Script can take a minute to run. 
+
+```
+~/scripts/archive_enum.py <host> <port> [--scheme https] [--paths unauth_paths_<host>.txt] [--stack <php|aspnet|java|node>] [| tee archive_enum_<ip>_<port>.txt]
+```
+
+- `--paths unauth_paths_<host>.txt` — probe directories are every discovered path's ancestor dirs (`/local/archives/x.sql` → `/`, `/local/`, `/local/archives/`). Omit → webroot `/` only.
+- `--scheme https` — TLS services (default `http`).
+- `--stack <stack>` — from Step 2 fingerprint; `java` adds `war,jar,ear` to the extension set. Others stacks (`php`/`aspnet`/`node`) not built yet.
+
+⚠️ The boxed preamble echoes the actual run config and the probe-count side effect (`issues up to N HTTP requests`). If N is too loud for the engagement, trim the `_COMMON_STEMS` / `_CORE_EXTS` constants in the script.
+
+#### Route per marker
+
+- `ARCHIVE_FOUND: <url> [<kind>] <size> (basis=…)` — confirmed archive = **loot**.
+    - Log: `echo 'ARCHIVE_FOUND: <url>' >> route_<ip>.txt`
+    - Retrieve and inspect **manually** for now (creds / configs / source / DB dumps / directory tree) — the shared local-file/tree inspector is a deferred build (deferred — full design: [[Local File & Tree Inspector]] in Design Notes).
+    - **Loot, not surface:** do NOT add `<url>` to `unauth_paths_<host>.txt` (its re-fire consumers — Step 3 reads, Step 4 input enum, Step 5 auth forms — all no-op on an archive). Paths/endpoints found _inside_ the archive on inspection ARE surface → those go to `unauth_paths_<host>.txt` and re-fire at the next Step boundary.
+- `ARCHIVE_RESTRICTED: <url> (HTTP 401/403 …)` — exists but forbidden. Log `RESTRICTED: <url>` to `route_<ip>.txt`; re-attempt with any credentials recovered downstream.
+- `ARCHIVE_UNCONFIRMED: <url> (200, …)` — 200 but identity not confirmable (generic `octet-stream`, or no magic / not HTML / not SQL). Eyeball manually: `curl -s -r 0-63 "<url>" | xxd | head`. Real archive → treat as `ARCHIVE_FOUND`; otherwise drop.
+- `NO_ARCHIVES_CONFIRMED: <target>` 
+- `SCAN COMPLETE: <N> probed, <c> confirmed, <u> unconfirmed, <r> restricted, <s> soft-404 suppressed, <m> not-found` (+ `, <e> errored` when any probe got no response) — positive scan-completion confirmation. A clean no-hit run is explicit, never a silent prompt-return.
 
 ## — Boundary — end of Step 7
 
