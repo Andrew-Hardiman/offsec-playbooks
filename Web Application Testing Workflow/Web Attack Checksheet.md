@@ -501,6 +501,34 @@ Route on output:
 - `<loc>` entries present → for each not already in `unauth_paths_<host>.txt`, extract path (strip scheme+host) → `echo '<path>' >> unauth_paths_<host>.txt`
 - `SITEMAP_ABSENT` → continue
 
+### 6.3 Apache diagnostic endpoints (`/server-status`, `/server-info`)
+
+⚠️ Apache-stack only. mod_status` / `mod_info` default to `Require local`, but a `Require all granted` in any vhost silently overrides it.
+
+##### Server Status
+
+`code=$(curl -s -o /dev/null -w '%{http_code}' "http://<host>:<port>/server-status"); echo "SERVER_STATUS: HTTP $code"`
+
+Route on `$code`:
+
+- `200` — exposed. Mine:
+  - Version: `curl -s "http://<host>:<port>/server-status" | grep -oiE 'Server Version: *[^<]+'` → **Version-discovery route** on the `Apache/<version>` token and any other product/version tokens in the line (OpenSSL, mod_perl, PHP, …). 
+  - In-flight request paths (present only under `ExtendedStatus On`): `curl -s "http://<host>:<port>/server-status" | grep -oiE '(GET|POST|HEAD|PUT|DELETE|OPTIONS|PATCH)[[:space:]]+/[^[:space:]]*[[:space:]]+HTTP/[0-9.]+' | awk '{print $2}' | grep -vE '^/server-(status|info)\b'`. **Add relevant paths to `unauth_paths_<host>.txt`** No matches → `ExtendedStatus` off; version only.
+- `403` — module loaded, `Require local` effective. `echo 'RESTRICTED: /server-status' >> route_<ip>.txt`; re-attempt via any localhost-origin primitive (e.g. SSRF) found later.
+- `404` — `mod_status` off/absent. No action.
+
+##### Server Info
+
+`code=$(curl -s -o /dev/null -w '%{http_code}' "http://<host>:<port>/server-info"); echo "SERVER_INFO: HTTP $code"`
+
+Route on `$code`:
+
+- `200` — exposed. Leaks loaded modules + full config (module presence → attack surface, e.g. `mod_cgi`; config may disclose `DocumentRoot`, aliases, paths).
+  - Version: `curl -s "http://<host>:<port>/server-info" | grep -oiE 'Server Version: *[^<]+'` → **Version-discovery route**.
+  - `echo 'CONFIG_LEAK: /server-info' >> route_<ip>.txt`, read manually: `curl -s "http://<host>:<port>/server-info" | less`; any path/alias disclosed → `echo '<path>' >> unauth_paths_<host>.txt`.
+- `403` — loaded, restricted. `echo 'RESTRICTED: /server-info' >> route_<ip>.txt`.
+- `404` — `mod_info` off/absent. No action.
+
 ---
 
 ## — Boundary — end of Step 6
@@ -525,25 +553,25 @@ Select extension set per server-side stack identified in Step 2 (Version-discove
 #### **Choose one — feroxbuster invocation:**
 
 - **PHP stack**:
-  `feroxbuster -u "http://<host>:<port>" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,phtml,php3,php4,php5,inc,html,txt,js,json,bak,log,conf,env,old,orig -d 4 -o feroxbuster_<ip>_<port>.txt`
+  `feroxbuster -u "http://<host>:<port>" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,phtml,php3,php4,php5,inc,html,txt,js,json,bak,log,conf,env,old,orig -d 4 --auto-tune -o feroxbuster_<ip>_<port>.txt`
 
 - **ASP.NET stack**:
-  `feroxbuster -u "http://<host>:<port>" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x aspx,asp,ashx,asmx,config,html,txt,js,json,bak,log,old -d 4 -o feroxbuster_<ip>_<port>.txt`
+  `feroxbuster -u "http://<host>:<port>" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x aspx,asp,ashx,asmx,config,html,txt,js,json,bak,log,old -d 4 --auto-tune -o feroxbuster_<ip>_<port>.txt`
 
 - **Java/JSP stack**:
-  `feroxbuster -u "http://<host>:<port>" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x jsp,jspx,do,action,xml,html,txt,js,json,bak,log,conf,old -d 4 -o feroxbuster_<ip>_<port>.txt`
+  `feroxbuster -u "http://<host>:<port>" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x jsp,jspx,do,action,xml,html,txt,js,json,bak,log,conf,old -d 4 --auto-tune -o feroxbuster_<ip>_<port>.txt`
 
 - **Node.js / Python stack**:
-  `feroxbuster -u "http://<host>:<port>" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x js,json,txt,bak,log,env,conf,old,py -d 4 -o feroxbuster_<ip>_<port>.txt`
+  `feroxbuster -u "http://$host:$port" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x js,json,txt,bak,log,env,conf,old,py -d 4 --auto-tune -o feroxbuster_${host}_$port.txt`
 
 - **Stack unknown** (wide-net fallback):
-  `feroxbuster -u "http://<host>:<port>" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,aspx,jsp,html,txt,js,json,bak,log,conf,inc,env,old,orig,py -d 4 -o feroxbuster_<ip>_<port>.txt`
+  `feroxbuster -u "http://$host:$port" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,aspx,jsp,html,txt,js,json,bak,log,conf,inc,env,old,orig,py -d 4 --auto-tune -o feroxbuster_${host}_$port.txt`
 
 `-d 4` caps recursion depth. Feroxbuster shows all status codes; it suppresses the not-found wall by auto-building a wildcard filter from that response's signature (lines/words/chars) — the `… created new filter` lines are this calibration, not findings. Any response deviating from the signature (a non-404, or a 404 of a different size) is shown.
 
 **Overlays:**
 - ⚠️ Rate-limit (real engagement, WAF suspected): append `-t 5 --rate-limit 10` (5 threads, 10 req/sec) ⚠️.
-- Same-length noise (server returns 200 for missing paths): feroxbuster's `--auto-tune` / `--auto-bail` handles most; manual `-C <length>` filters a specific length.
+- Same-length noise (server returns 200 for missing paths): feroxbuster's automatic wildcard filter handles most (see body); manual `-C <length>` filters a specific response length.
 
 #### **Gobuster fallback** — if feroxbuster unavailable:
 
@@ -552,11 +580,24 @@ Select extension set per server-side stack identified in Step 2 (Version-discove
 ⚠️ Gobuster does NOT recurse. `-r` follows redirects only. For every 200/301/302 hit on a directory-shape path, manually re-invoke:
 `gobuster dir -u "http://<host>:<port>/<discovered_dir>/" -w <wordlist> -x <extensions> -o gobuster_<ip>_<port>_<slug>.txt`
 
+#### **Error gate** — run before per-hit processing:
+
+Feroxbuster run only — skip if gobuster fallback was used.
+
+Read `errors:<errors>` and the request total from feroxbuster's overall completion line (`<total>/<total> … found:… errors:<errors>`), then:
+
+`awk -v e=<errors> -v t=<total> 'BEGIN{r=e/t*100; printf "%.3f%% errored — %s\n", r, (r>0.5?"RERUN":"PROCEED")}'`
+
+Route on verdict:
+
+- `PROCEED` → continue to per-hit processing.
+- `RERUN` → rerun this leg once with `-t 10`, then continue to per-hit processing.
+
 #### **Per-hit processing** — five small single-purpose commands:
 
 ##### (a) Extract hit URLs to a working file:
 
-`awk '/^[0-9]{3}[[:space:]]/ {print $NF}' feroxbuster_<ip>_<port>.txt | sort -u > hits_<ip>_<port>.txt`
+`awk '/^[0-9]{3}[[:space:]]/ {print $NF}' feroxbuster_${host}_$port.txt | sort -u > hits_${host}_$port.txt`
 
 ##### (b) Add every hit path to `unauth_paths_<host>.txt`:
 
@@ -567,46 +608,32 @@ Select extension set per server-side stack identified in Step 2 (Version-discove
 `grep 'directory listing' feroxbuster_<ip>_<port>.txt | sed -E 's|^.*directory listing: |AUTOINDEX: |'`
 
 For each `AUTOINDEX: <url>` line, record to `route_<ip>.txt`.
-##### (d) High-value config-shape file inspection — `.env`, `.htaccess`, `web.config`, `phpinfo`, `.log`:
+##### (d) High-value file inspection
 
-> ⚠️ **STOP — 3 iterations deep; do not hand-amend this command again.** Its correctness is not confirmable on read (cred regex + `'"'"'` shell-escaping — both have broken under inline review). A 4th amend **is the escalation trigger**: build a typed Python script in `~/scripts/` with a `test_<name>.py` regression suite (Language Selection — attacker-side), and route this block to consume its markers. > **Build spec — preserve all current value; these are additions, not a redesign.** Keep every marker and route in the "Route per marker" block below exactly: FILE_CRED → placeholder-verify → `creds_<host>.txt` + `route_<ip>.txt` audit log; NO_CRED_PATTERN → manual review for stack traces, paths, framework hints, usernames. Add: (1) manual review is a leaf on BOTH branches — the file is high-value by *selection*, not by match; the regex highlights, it does not exhaust. (2) Fetch failure (404/403/5xx/empty/timeout) is its own outcome — capture HTTP status — not folded into NO_CRED_PATTERN; manual review applies only to successfully-fetched files. > **One script covers (d) + (e) — read BOTH notes' build specs before building; neither is the full spec alone. (e)'s note adds the `ENDPOINT_REF` extractor (→ `unauth_paths_<host>.txt`, re-fires at the Step 7 boundary) that this block has no equivalent of.**
-> **Full design → [[Local File & Tree Inspector]]** (Design Notes) — the deferred shared inspector this escalates to; supersedes the inline build-spec summary above.
+Create the local inspection dir:
 
-`grep -E '(\.env|\.htaccess|web\.config|phpinfo|\.log)$|/\.env$|/phpinfo\.php$' hits_<ip>_<port>.txt | while read u; do echo "=== $u ==="; out=$(curl -s -L "$u" | grep -oiE '(password|passwd|secret|api[_-]?key|token|bearer)[A-Za-z0-9._-]*["'"'"']?\s*[:=]\s*["'"'"']?[^"'"'"'[:space:]]+'); if [ -n "$out" ]; then echo "$out" | while read c; do echo "FILE_CRED: $u: $c"; done; else echo "NO_CRED_PATTERN — high-value file, MANUAL REVIEW ADVISED (curl -s -L \"$u\")"; fi; done`
+`mkdir -p inspect_${host}_$port`
 
-Route per marker:
+Download every hit (**relies on `(a) Extract hit URLs....`, above, having been successfully run**) except HTML pages and media:
 
-- `FILE_CRED: <url>: <match>` — cred pattern matched:
-  - Verify manually (may be placeholder like `changeme`, `<PASSWORD>`, template-shape value)
-  - Real credential → `echo '<user>:<pass>' >> creds_<host>.txt` per accumulator convention
-  - Log for audit trail: `echo 'FILE_CRED: <url>: <match>' >> route_<ip>.txt`
-- `NO_CRED_PATTERN` — grep found no cred pattern, but file is high-value:
-  - Manually review with the ready-to-paste `curl` command shown in the marker output
-  - Look for stack traces, paths, framework hints, secrets, usernames — none of which the cred grep catches
-  - If review yields credentials → `echo '<user>:<pass>' >> creds_<host>.txt`
-  - If review yields nothing exploitable → no action; file was inspected, moving on
+`grep -vE '\.(html?|png|jpe?g|gif|svg|ico|webp|bmp|tiff?|avif|css|woff2?|ttf|otf|eot|mp[34]|m4[av]|webm|wav|ogg|oga|flac|aac|avi|mov|mkv|wmv|flv)$|/$' hits_${host}_$port.txt | while read -r url; do curl -s -L -O --output-dir inspect_${host}_$port "$url"; done`
 
-##### (e) High-value source-shape file inspection — `.js`, `.json`, `.bak`, `.old`, `.orig`, `.swp`, `~`:
+Inspect the tree:
 
-> ⚠️ **STOP — 3 iterations deep; do not hand-amend this command again.** Its correctness is not confirmable on read (cred regex + endpoint regex + `'"'"'` shell-escaping). A 4th amend **is the escalation trigger**: build a typed Python script in `~/scripts/` with a `test_<name>.py` regression suite (Language Selection — attacker-side), and route this block to consume its markers. > **Build spec — preserve all current value; these are additions, not a redesign.** This block is a cred AND endpoint extractor — keep every marker and route in the "Route per marker" block below exactly: SRC_CRED → placeholder-verify → `creds_<host>.txt` + audit log; **ENDPOINT_REF → `unauth_paths_<host>.txt` (re-fires at the Step 7 boundary)**; NO_PATTERN_MATCH → review for `.bak/.old/.orig/.swp/~` source-disclosure, skim/skip for `.js/.json`. Add: (1) manual review is a leaf on EVERY fetch-success branch — cred-hit, endpoint-hit, both, and no-match — high-value by *selection*, not by match. (2) Fetch failure (404/403/5xx/empty/timeout) is its own outcome — capture HTTP status — not folded into NO_PATTERN_MATCH; manual review applies only to successfully-fetched files. > **One script covers (d) + (e) — read BOTH notes' build specs before building; neither is the full spec alone. (d)'s note carries the config-file cred checklist (stack traces / paths / framework hints / usernames), separate from this block's endpoint extraction.**
-> **Full design → [[Local File & Tree Inspector]]** (Design Notes) — the deferred shared inspector this escalates to; supersedes the inline build-spec summary above.
-
-`grep -E '\.(js|json|bak|old|orig|swp)$|~$' hits_<ip>_<port>.txt | while read u; do echo "=== $u ==="; body=$(curl -s -L "$u"); creds=$(echo "$body" | grep -oiE '(password|passwd|secret|api[_-]?key|token|bearer)[A-Za-z0-9._-]*["'"'"']?\s*[:=]\s*["'"'"'][^"'"'"']+'); eps=$(echo "$body" | grep -oiE '["'"'"']/(api|v[0-9]|admin|user|auth|login|internal)[^"'"'"']*["'"'"']' | tr -d '"'"'"); if [ -n "$creds" ]; then echo "$creds" | while read c; do echo "SRC_CRED: $u: $c"; done; fi; if [ -n "$eps" ]; then echo "$eps" | while read ep; do echo "ENDPOINT_REF: $u: $ep"; done; fi; if [ -z "$creds" ] && [ -z "$eps" ]; then echo "NO_PATTERN_MATCH — source-shape file, MANUAL REVIEW ADVISED for backup/source-disclosure content (curl -s -L \"$u\" | less)"; fi; done`
+`~/scripts/local_file_inspector.py inspect_${host}_$port`
 
 Route per marker:
 
-- `SRC_CRED: <url>: <match>` — cred pattern matched:
-  - Verify manually — may be dev placeholder rather than real credential
-  - Real credential → `echo '<user>:<pass>' >> creds_<host>.txt`
-  - Log for audit trail: `echo 'SRC_CRED: <url>: <match>' >> route_<ip>.txt`
-- `ENDPOINT_REF: <url>: <ref>` — endpoint reference extracted from source file:
-  - Add to accumulator: `echo '<ref>' >> unauth_paths_<host>.txt` (re-fire drains at Step 7 boundary)
-- `NO_PATTERN_MATCH` — neither cred nor endpoint pattern matched, but file may still hold value:
-  - For `.bak` / `.old` / `.orig` / `~` / `.swp`: high-value source disclosure — manually review
-  - For `.js` / `.json`: often minified library or benign config — skim, likely skip
-  - Manual review command shown in the marker output
+- `FILE_CRED: <path>: <match>` — verify (may be a placeholder like `changeme` / `<PASSWORD>`); real credential → `echo '<user>:<pass>' >> creds_<host>.txt`; log `echo 'FILE_CRED: <path>: <match>' >> route_<ip>.txt`.
+- `SECRET: <path>: <type>:<value>` — route by `<type>`: `jwt` → [[Session Cookie Attacks]] (JWT branch); `bearer` / `token` → reuse as an `Authorization` header on auth-gated requests; `aws_akid` / `api_key` / `google_api_key` / `slack_token` / `pem_private_key` / `secret` → note for the matching service, reuse when that service surfaces. Log to `route_<ip>.txt`.
+- `ENDPOINT_REF: <path>: <ref>` — new attack surface → `echo '<ref>' >> unauth_paths_<host>.txt` (re-fire drains at the Step 7 boundary). A `${...}` / `:param` stub is a 7.2 positional-fuzz seed, not a literal probe.
+- `ARCHIVE_NESTED: <path>` — the retrieved file is itself an archive → 7.3 loot: extract to a sandbox dir, then re-run the inspector over the extracted tree.
+- `MANUAL_REVIEW: <path>` — file read OK; eyeball the local copy at `inspect_<ip>_<port>/…` for what the regexes do not catch (stack traces, framework hints, usernames, source disclosure in `.bak` / `.old` / `.orig` / `~`).
+- `FLAG: <path>: <value>` — CTF flag.
+- `READ_FAIL: <path>: <reason>` — retrieval or read failed; NOT a no-match. Re-fetch manually if the hit looked live.
+- `SCAN COMPLETE: …` — positive completion; a clean no-finding run is explicit, never a silent return.
 
-##### (f) 403 handling — surface for later credential re-use:
+##### (e) 403 handling — surface for later credential re-use:
 
 `out=$(awk '/^403[[:space:]]/ {print $NF}' feroxbuster_<ip>_<port>.txt); if [ -n "$out" ]; then echo "$out" | while read u; do path=$(echo "$u" | sed -E "s|^https?://<host>(:<port>)?||"); echo "RESTRICTED: $path"; done; else echo "NO_403_HITS"; fi`
 
@@ -617,7 +644,7 @@ Route per marker:
   - When creds recovered downstream, re-attempt via authed request
 - `NO_403_HITS` — feroxbuster found no 403s on this target.
 
-##### (g) `.git` metadata — surface for git-dumper (out of Step 7 scope):
+##### (f) `.git` metadata — surface for git-dumper (out of Step 7 scope):
 
 `out=$(grep -E '/\.git/(HEAD|config|index)$' hits_<ip>_<port>.txt); if [ -n "$out" ]; then echo "$out" | while read u; do echo "GIT_LEAK: $u — run 'git-dumper <base_git_url> ./gitdump-<ip>' (out of Step 7)"; done; else echo "NO_GIT_LEAK"; fi`
 
@@ -639,13 +666,13 @@ Then → 7.2.
 
 #### feroxbuster invocation:
 
-`feroxbuster -u "http://<host>:<port>" -w /usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt -d 4 -o feroxbuster_api_<ip>_<port>.txt`
+`feroxbuster -u "http://<host>:<port>" -w /usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt -d 4 --auto-tune -o feroxbuster_api_<ip>_<port>.txt`
 
 `-d 4` caps recursion depth. Feroxbuster shows all status codes; it suppresses the not-found wall by auto-building a wildcard filter from that response's signature (lines/words/chars) — the `… created new filter` lines are this calibration, not findings. Any response deviating from the signature (a non-404, or a 404 of a different size) is shown.
 
 **Overlays:**
 - ⚠️ Rate-limit (real engagement, WAF suspected): append `-t 5 --rate-limit 10` (5 threads, 10 req/sec).
-- Same-length / soft-404 noise (server returns 200 for missing paths): `--auto-tune` / `--auto-bail` handles most; manual `-C <length>` filters a specific response length.
+- Same-length noise (server returns 200 for missing paths): feroxbuster's automatic wildcard filter handles most (see body); manual `-C <length>` filters a specific response length.
 
 ⚠️ **Stack-conditional doc paths** — only if Step 2 fingerprinted the stack. Probe the matching stack's path(s); any 200 → append the URL to `hits_api_<ip>_<port>.txt` and run (c) against it.
 
@@ -658,6 +685,19 @@ Then → 7.2.
 
 Gobuster does NOT recurse. For every 200/301/302 hit on a directory-shape path (`/api`, `/api/v1`, …), manually re-invoke against it:
 `gobuster dir -u "http://<host>:<port>/<discovered_dir>/" -w /usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt -o gobuster_api_<ip>_<port>_<slug>.txt`
+
+#### Error gate — run before per-hit processing:
+
+Feroxbuster run only — skip if gobuster fallback was used.
+
+Read `errors:<errors>` and the request total from feroxbuster's overall completion line (`<total>/<total> … found:… errors:<errors>`), then:
+
+`awk -v e=<errors> -v t=<total> 'BEGIN{r=e/t*100; printf "%.3f%% errored — %s\n", r, (r>0.5?"RERUN":"PROCEED")}'`
+
+Route on verdict:
+
+- `PROCEED` → continue to per-hit processing.
+- `RERUN` → rerun this leg once with `-t 10`, then continue to per-hit processing.
 
 #### Per-hit processing:
 

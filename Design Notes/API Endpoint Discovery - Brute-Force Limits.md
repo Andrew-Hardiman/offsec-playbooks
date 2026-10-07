@@ -113,3 +113,54 @@ A path the wordlist can't reach has to be learned from a source other than blind
 - SecLists `Discovery/Web-Content/api/` README (`objects.txt` = nouns, `actions.txt` = verbs; `api-endpoints.txt` = 371 curated full paths incl. spec/doc/graphql): https://github.com/danielmiessler/SecLists/tree/master/Discovery/Web-Content/api
 - API-discovery method reference: OWASP WSTG API Reconnaissance; https://zerodayhacker.com/discover-api-endpoints-with-feroxbuster/
 - Sandbox-verified this session: recursion-ladder failure (parents 404 → recursion assembles nothing); positional-fuzz success (same wordlist, clusterbomb reaches the leaf); status/content-type classification.
+
+---
+
+## Session addendum — 2026-10-06 (tripwire fired → build triggered)
+
+**Additive only** — everything above is unchanged. This records the second tripwire occurrence that triggers the build, plus design points raised while scoping it that the original derivation does not cover. Where a point sharpens an existing section, it names that section rather than restating it.
+
+### Status: the build is now triggered
+
+Second occurrence (the tripwire's "do not ignore a second time"): THM **Web Server Attacks - I**, the API app on **:8000**. Brute (7.2) returned only `/`; the room's own writeup shows `/api/users`, `/api/routes`, `/api/debug/env` exist — exactly the blind spot in _Why blind brute misses the endpoints_. → Build the fix.
+
+### Numbering (the body above predates the WAC restructure)
+
+`6.2 API endpoint enumeration` throughout the body = current **7.2**. `6.1 (e)` (source-shape grep) = the former 7.1(e), now **merged into 7.1(d)** and routed through the shared inspector (below). Read the body's step numbers accordingly.
+
+### Yield ordering — where discovery actually comes from (recalibration)
+
+`unauth_paths_<host>` is fed by many WAC steps. Ranked by yield for _this_ blind spot, to keep the build centred correctly:
+
+1. **One-hit-full-surface disclosures** — the existing spec/GraphQL parse (7.2 c/d) **and** a route-disclosing / debug-endpoint probe (new, below). One hit returns the whole route table.
+2. **Client-side code harvest (the harvest's primary source)** — grep the app's **shipped client code** — the SPA / front-end JS bundle loaded via the Step 1 HAR — for endpoint literals + `fetch`/XHR/axios targets. **High-yield for SPA / thick-client apps**: the bundle names essentially every endpoint the UI calls. N/A only for API-only or purely server-rendered targets. Runs through the inspector's `ENDPOINT_REF`.
+3. **Positional-fuzz** (the _What does reach multi-segment paths_ section above) — the systematic sweep once structure is known; finds endpoints the UI does **not** call (hidden admin/internal/debug routes the bundle never names), so it complements (2) rather than duplicating it.
+4. **Stray-file harvest** — the inspector over config / txt / source files surfaced elsewhere (7.1(d), 7.3 archive members). A **low-yield backstop** (occasional path-shapes). Distinct from (2) — do not conflate "inspector over the JS bundle" (primary) with "inspector over a txt file" (backstop).
+
+### New: route-disclosing / debug-endpoint probe (highest yield, cheap)
+
+Before any blind fuzz, probe a small curated set of endpoints that **dump their own surface**: `/api/routes`, `/api/_routes`, `/api/debug/*`, `/actuator/mappings` (Spring Boot), `/__routes`, and framework siblings. A hit returns the full route list — the same "one hit, full surface" payoff the spec parse already gives. Belongs in the harvest sub-block, **ahead of** fuzz.
+
+### New: request-shape is a second, compounding axis
+
+The finding above is _path-assembly_ (you never request the path). Independent of it: a correctly-assembled path still false-negatives if the probe sends the wrong **request shape** — a browser `GET` against a content-negotiated API that only answers `Accept: application/json`, or a `GET` against a POST-only route (`/api/user/update` in the body is POST). So **every validation probe and ffuf matcher in both sub-blocks must vary `Accept: application/json` and the method (GET/POST), with matchers set accordingly** — per the V_S _GET/POST default-header asymmetry_ decision for browser-faithful headers. A path-assembly fix that still sends plain GETs re-introduces the miss at the validation step.
+
+### Harvest = acquisition (extraction is built); placement
+
+The "grep client code → endpoints" extraction half of harvest (the `katana`/`LinkFinder` role named in the body) is now the shared **`local_file_inspector`** — built + validated 2026-10-06; see `[[Local File & Tree Inspector]]`, whose `ENDPOINT_REF` is its endpoint contract. So the harvest sub-block only needs its **acquisition** half: gather the disclosure sources — **the full set in _Where paths outside the wordlist come from_ above** (spec/GraphQL via c/d; **client JS bundle via the Step 1 HAR — the primary source, distinct from Step 1's fired-traffic+hrefs and from old 7.1(e)'s brute-surfaced-only files**; observed traffic; server-side disclosure incl. the route-dumper probe + error traces; authenticated view) — and hand them to the inspector, whose `ENDPOINT_REF` flows to `unauth_paths`. The three-item shorthand elsewhere in this addendum is illustrative, not the whole list.
+
+**Placement:** harvest is a **7.2** sub-block that runs **late** — its input is maximal only after the Step 1 HAR and 7.1 brute exist — and feeds the positional-fuzz. Derived from that data-flow, not placement convenience (passed the V_S force-fit check).
+
+### Positional-fuzz — the curated per-position lists (completes the body's "small targeted lists per position")
+
+The body establishes the principle — positional fuzz is practical only with "known prefix, known depth, small targeted lists per position" — but leaves the lists as generic `objects.txt × actions.txt`, which it also flags as exploding (thousands of nouns × hundreds of verbs). The completion: **each position gets its own small, curated, API-meaningful set**, not a generic SecLists dump. This keeps depth-3+ feasible (small lists bound W^N) _and_ high-signal (real API vocabulary, not dictionary words):
+
+- **Prefix / structural position** — usually _pinned_ from discovered structure rather than fuzzed: `api`, `v1`, `v2`, `v3`, `rest`, `graphql`, `internal`, `admin`.
+- **Resource / noun positions**: `users`, `user`, `accounts`, `products`, `orders`, `items`, `routes`, `admin`, `auth`, `sessions`, `tokens`, `files`, `uploads`, `config`, `settings`, `debug`, `health`, `status`, `logs`, `reports`.
+- **Action / verb + common-sub positions**: `list`, `get`, `all`, `search`, `create`, `new`, `add`, `update`, `edit`, `delete`, `remove`, `me`, `self`, `export`, `import`, `status`.
+
+Mechanics (extends the body): pin the prefix from discovered structure; provide a template **per depth** — **depth 2 (`/<prefix>/FUZZ`) and depth 3 (`/<prefix>/FUZZ/FUZZ`) at least** (explicit operator requirement — real APIs nest past two segments), extensible to depth 4 — each its own `ffuf` clusterbomb invocation, feeding the matching curated list into each position (resource-vocab into noun positions, verb-vocab into action positions) and the request-shape headers/method above. Build-time: derive/trim these lists against the SecLists `Discovery/Web-Content/api/` wordlists, keeping each small enough that depth-3 stays feasible and quiet.
+
+### Minor: dynamic-route stubs as fuzz seeds
+
+The inspector emits template-literal routes as static stubs (`/api/${id}/update`). Route these as **positional-fuzz seeds** (known prefix + known trailing segment), not literal `unauth_paths` probes. Low-yield; noted for completeness.
