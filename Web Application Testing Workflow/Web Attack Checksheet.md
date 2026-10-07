@@ -775,7 +775,7 @@ Run **after 7.1** so `--paths` consumes the directories 7.1 discovered.
 
 - `ARCHIVE_FOUND: <url> [<kind>] <size> (basis=…)` — confirmed archive = **loot**.
     - Log: `echo 'ARCHIVE_FOUND: <url>' >> route_<ip>.txt`
-    - Retrieve and inspect **manually** for now (creds / configs / source / DB dumps / directory tree) — the shared local-file/tree inspector is a deferred build (deferred — full design: [[Local File & Tree Inspector]] in Design Notes).
+    - Retrieve, extract to a sandbox dir, and inspect: `~/scripts/local_file_inspector.py <dir>` → route its `FILE_CRED` / `SECRET` / `ENDPOINT_REF` / `FLAG` markers. The **extractor** (archive→tree unpack) is the one deferred stage — until built, extract by hand; full design: [[Local File & Tree Inspector]].
     - **Loot, not surface:** do NOT add `<url>` to `unauth_paths_<host>.txt` (its re-fire consumers — Step 3 reads, Step 4 input enum, Step 5 auth forms — all no-op on an archive). Paths/endpoints found _inside_ the archive on inspection ARE surface → those go to `unauth_paths_<host>.txt` and re-fire at the next Step boundary.
 - `ARCHIVE_RESTRICTED: <url> (HTTP 401/403 …)` — exists but forbidden. Log `RESTRICTED: <url>` to `route_<ip>.txt`; re-attempt with any credentials recovered downstream.
 - `ARCHIVE_UNCONFIRMED: <url> (200, …)` — 200 but identity not confirmable (generic `octet-stream`, or no magic / not HTML / not SQL). Eyeball manually: `curl -s -r 0-63 "<url>" | xxd | head`. Real archive → treat as `ARCHIVE_FOUND`; otherwise drop.
