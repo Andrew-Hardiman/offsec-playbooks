@@ -1,5 +1,5 @@
 
-> **STATUS: FORMAT-ONLY** — three-set structural restructure applied 2026-09-19; Step 7 (Active content discovery) fully first-principles + primary-source audited (7.1 2026-09-19, 7.2 re-derived 2026-10-12); remaining sub-blocks structurally reshaped from pre-audit state, per-sub-block first-principles derivation INCOMPLETE. Live-validation pending. Not CANONICAL.
+> **STATUS: FORMAT-ONLY** — three-set structural restructure applied 2026-09-19; Step 7 (Active content discovery) fully first-principles + primary-source audited (7.1 2026-09-19 / reworked 2026-10-14, 7.2 re-derived 2026-10-12); remaining sub-blocks structurally reshaped from pre-audit state, per-sub-block first-principles derivation INCOMPLETE. Live-validation pending. Not CANONICAL.
 
 Routes HTTP/HTTPS service to web attack technique walkthroughs. Pure router — attack content lives in per-technique files.
 
@@ -153,19 +153,29 @@ Seed walked file — marks all Step-1-discovered paths as already-covered by Pas
 
 Homepage-only sub-blocks; scope is `/` (or `/favicon.ico` for 2.2). These signals are server-config or template-level and near-always identical across paths on a single-app target; per-path iteration is not required.
 
-### 2.1 HTTP response headers
+### 2.1 Server identity — headers and error page
 
-`curl -s -D - -o /dev/null "http://<host>:<port>/" | grep -iE '^(Server|X-Powered-By):' || echo "NO_VERSION_HEADERS"`
+Run both, before routing. The two emission points **can** disagree; a disagreement is a second component, not a duplicate.
 
-Route on output:
+##### Headers (root):
 
-- `Server: <product>/<version>` line present → apply Version-discovery route (above)
-- `X-Powered-By: <product>/<version>` line present → apply Version-discovery route (above)
-- `NO_VERSION_HEADERS` → 2.2
+`curl -s -D - -o /dev/null "http://$host:$port/" | grep -iE '^(Server|X-Powered-By):' || echo "NO_VERSION_HEADERS"`
+
+##### Default error page (non-routed path):
+
+`curl -s --max-time 5 "http://$host:$port/zzrandomzz404" | grep -oiE '(apache tomcat|apache-coyote|microsoft-iis|openresty|nginx|apache|lighttpd|jetty|litespeed|caddy|gunicorn|werkzeug)([/ ]v?[0-9]+(\.[0-9]+)*)?' | sort -u | grep . || echo "NO_ERRORPAGE_BANNER"`
+
+Route on output (each line routes independently; a product already seen in the other leg needs no second lookup):
+
+- `Server: <product>/<version>` or `X-Powered-By: <product>/<version>` → apply **Version-discovery route** (above)
+- `Server: <product>` or `X-Powered-By: <product>`, no version number → [[Web Stack Version Discovery]]
+- `<product>/<version>` from the error page → apply **Version-discovery route** (above)
+- `<product>` from the error page, no version number → [[Web Stack Version Discovery]]
+- `NO_VERSION_HEADERS` AND `NO_ERRORPAGE_BANNER` → 2.2
 
 ### 2.2 Favicon fingerprint
 
-`curl -sfL http://<host>:<port>/favicon.ico | md5sum || echo "FAVICON_ABSENT"`
+`curl -sfL http://$host:$port/favicon.ico | md5sum || echo "FAVICON_ABSENT"`
 
 Compare hash against [OWASP favicon database](https://wiki.owasp.org/index.php/OWASP_favicon_database) ([[Useful Websites (Web App Pen Testing)]]) - **NB: Search the database using `Ctrl+f` on the webpage; using the search input box searches the entire website, not the database (page)**
 
@@ -193,7 +203,7 @@ Two sweeps: meta tags and visible text. Both feed **Version-discovery route** (a
 
 #### Meta tags:
 
-`curl -s http://<host>:<port>/ | grep -oiE '<meta[^>]*(generator|framework)[^>]*>' || echo "NO_META_GEN"`
+`curl -s http://$host:$port/ | grep -oiE '<meta[^>]*(generator|framework)[^>]*>' || echo "NO_META_GEN"`
 
 Route on output:
 
@@ -203,7 +213,7 @@ Route on output:
 
 #### Visible text:
 
-`{ curl -s http://<host>:<port>/ | perl -0777 -pe 's#<(style|script)\b[^>]*>.*?</\1>##gs; s#<[^>]*># #g' | grep -oiE '[a-zA-Z][a-zA-Z0-9._-]* v?[0-9]+(\.[0-9]+)+' || echo "NO_VISIBLE_VERSION"; } | sort -u`
+`{ curl -s http://$host:$port/ | perl -0777 -pe 's#<(style|script)\b[^>]*>.*?</\1>##gs; s#<[^>]*># #g' | grep -oiE '[a-zA-Z][a-zA-Z0-9._-]* v?[0-9]+(\.[0-9]+)+' || echo "NO_VISIBLE_VERSION"; } | sort -u`
 
 Route on output:
 
@@ -212,7 +222,7 @@ Route on output:
 
 ### 2.5 Cookies (unauth, root)
 
-`curl -s -D - -o /dev/null "http://<host>:<port>/" | grep -i '^Set-Cookie:' || echo "NO_COOKIES"`
+`curl -s -D - -o /dev/null "http://$host:$port/" | grep -i '^Set-Cookie:' || echo "NO_COOKIES"`
 
 Route on output:
 
@@ -231,7 +241,7 @@ Any sub-block that discovers a new path appends to `unauth_paths_<host>.txt`; re
 
 Scope: HTML-eligible paths in `unauth_paths_<host>.txt`.
 
-`grep -vE '\.(png|jpg|jpeg|gif|css|js|woff2?|ico|svg|mp4|webm|pdf|zip|tar|gz|json)$' unauth_paths_<host>.txt | while read p; do echo "=== $p ==="; out=$(curl -s "http://<host>:<port>${p}" | grep -Pzo '(?s)<!--.*?-->' | tr -d '\0'); [ -n "$out" ] && printf '%s\n' "$out" || echo "NO_COMMENTS"; done`
+`grep -vE '\.(png|jpg|jpeg|gif|css|js|woff2?|ico|svg|mp4|webm|pdf|zip|tar|gz|json)$' unauth_paths_$host.txt | while read p; do echo "=== $p ==="; out=$(curl -s "http://$host:$port${p}" | grep -Pzo '(?s)<!--.*?-->' | tr -d '\0'); [ -n "$out" ] && printf '%s\n' "$out" || echo "NO_COMMENTS"; done`
 
 Route per path on inspection (per finding, may fire multiple):
 
@@ -246,7 +256,7 @@ Route per path on inspection (per finding, may fire multiple):
 
 Scope: HTML-eligible paths in `unauth_paths_<host>.txt`.
 
-`grep -vE '\.(png|jpg|jpeg|gif|css|js|woff2?|ico|svg|mp4|webm|pdf|zip|tar|gz|json)$' unauth_paths_<host>.txt | while read p; do echo "=== $p ==="; curl -s "http://<host>:<port>${p}" | grep -oiE 'href=["'"'"'][^"'"'"']*(admin|dashboard|settings|manage|console)[^"'"'"']*' | sort -u || echo "NO_ADMIN_LINK"; done`
+`grep -vE '\.(png|jpg|jpeg|gif|css|js|woff2?|ico|svg|mp4|webm|pdf|zip|tar|gz|json)$' unauth_paths_$host.txt | while read p; do echo "=== $p ==="; curl -s "http://$host:$port${p}" | grep -oiE 'href=["'"'"'][^"'"'"']*(admin|dashboard|settings|manage|console)[^"'"'"']*' | sort -u || echo "NO_ADMIN_LINK"; done`
 
 For each admin-shape href hit, extract the path portion. Test unauth access:
 
@@ -266,7 +276,7 @@ Route on status code:
 
 Scope: HTML-eligible paths in `unauth_paths_<host>.txt`.
 
-`grep -vE '\.(png|jpg|jpeg|gif|css|js|woff2?|ico|svg|mp4|webm|pdf|zip|tar|gz|json)$' unauth_paths_<host>.txt | while read p; do echo "=== $p ==="; out=$(curl -s "http://<host>:<port>${p}" | grep -oE '(THM|HTB|flag|FLAG|CTF)\{[^}]*\}'); [ -n "$out" ] && printf '%s\n' "$out" || echo "NO_FLAG"; done`
+`grep -vE '\.(png|jpg|jpeg|gif|css|js|woff2?|ico|svg|mp4|webm|pdf|zip|tar|gz|json)$' unauth_paths_$host.txt | while read p; do echo "=== $p ==="; out=$(curl -s "http://$host:$port${p}" | grep -oE '(THM|HTB|flag|FLAG|CTF)\{[^}]*\}'); [ -n "$out" ] && printf '%s\n' "$out" || echo "NO_FLAG"; done`
 
 Route per path on output:
 
@@ -281,9 +291,9 @@ Enumerate every input the app exposes — URL query parameters and HTML form con
 
 Batch both scripts over the master path list:
 
-`~/scripts/url_params_enum.py --base http://$host:$port --paths unauth_paths_<host>.txt --verbose >> url_params_$host.txt`
+`~/scripts/url_params_enum.py --base http://$host:$port --paths unauth_paths_$host.txt --verbose >> url_params_$host.txt`
 
-`~/scripts/form_enum.py --base http://$host:$port --paths unauth_paths_<host>.txt --verbose >> form_enum_$host.txt`
+`~/scripts/form_enum.py --base http://$host:$port --paths unauth_paths_$host.txt --verbose >> form_enum_$host.txt`
 
 ⚠️ **JS-tripwire:** `form_enum.py` flags pages whose forms may be JS-built (they won't appear in its output). If a form visible in the browser is missing from the output, capture it from HAR/Burp and route it manually.
 
@@ -324,7 +334,7 @@ Nothing observed for a path → no action.
 
 Discover login form via:
 
-`~/scripts/web_auth_probe.sh <host> <port> --mode=login`
+`~/scripts/web_auth_probe.sh $host $port --mode=login`
 
 Optional flags:
 
@@ -378,7 +388,7 @@ Route on markers:
 
 Discover register / sign-up form via:
 
-`~/scripts/web_auth_probe.sh <host> <port> --mode=register`
+`~/scripts/web_auth_probe.sh $host $port --mode=register`
 
 Optional flags:
 
@@ -429,7 +439,7 @@ Route on markers:
 
 Discover forgot-password / reset form via:
 
-`~/scripts/web_auth_probe.sh <host> <port> --mode=forgot`
+`~/scripts/web_auth_probe.sh $host $port --mode=forgot`
 
 Optional flags:
 
@@ -485,7 +495,7 @@ Route on markers:
 
 ### 6.1 robots.txt
 
-`curl -s http://<host>:<port>/robots.txt || echo "ROBOTS_ABSENT"`
+`curl -s http://$host:$port/robots.txt || echo "ROBOTS_ABSENT"`
 
 Route on output:
 
@@ -494,20 +504,22 @@ Route on output:
 
 ### 6.2 sitemap.xml
 
-`{ curl -sfL "http://<host>:<port>/sitemap.xml" || curl -sfL "http://<host>:<port>/sitemap_index.xml"; } || echo "SITEMAP_ABSENT"`
+`{ curl -sfL "http://$host:$port/sitemap.xml" || curl -sfL "http://$host:$port/sitemap_index.xml"; } || echo "SITEMAP_ABSENT"`
 
 Route on output:
 
 - `<loc>` entries present → for each not already in `unauth_paths_<host>.txt`, extract path (strip scheme+host) → `echo '<path>' >> unauth_paths_<host>.txt`
 - `SITEMAP_ABSENT` → continue
 
-### 6.3 Apache diagnostic endpoints (`/server-status`, `/server-info`)
+### 6.3 Server diagnostic endpoints
 
-⚠️ Apache-stack only. mod_status` / `mod_info` default to `Require local`, but a `Require all granted` in any vhost silently overrides it.
+⚠️ Stack-gated — run the Apache block on an Apache stack, the nginx block on an nginx stack; stack unknown → run both.
 
-##### Server Status
+⚠️ `mod_status` / `mod_info` default to `Require local`, but a `Require all granted` in any vhost silently overrides it. nginx `stub_status` has no default location and no default access restriction — both are set per `location` block.
 
-`code=$(curl -s -o /dev/null -w '%{http_code}' "http://<host>:<port>/server-status"); echo "SERVER_STATUS: HTTP $code"`
+##### Apache Server Status
+
+`code=$(curl -s -o /dev/null -w '%{http_code}' "http://$host:$port/server-status"); echo "SERVER_STATUS: HTTP $code"`
 
 Route on `$code`:
 
@@ -517,9 +529,9 @@ Route on `$code`:
 - `403` — module loaded, `Require local` effective. `echo 'RESTRICTED: /server-status' >> route_<ip>.txt`; re-attempt via any localhost-origin primitive (e.g. SSRF) found later.
 - `404` — `mod_status` off/absent. No action.
 
-##### Server Info
+##### Apache Server Info
 
-`code=$(curl -s -o /dev/null -w '%{http_code}' "http://<host>:<port>/server-info"); echo "SERVER_INFO: HTTP $code"`
+`code=$(curl -s -o /dev/null -w '%{http_code}' "http://$host:$port/server-info"); echo "SERVER_INFO: HTTP $code"`
 
 Route on `$code`:
 
@@ -528,6 +540,18 @@ Route on `$code`:
   - `echo 'CONFIG_LEAK: /server-info' >> route_<ip>.txt`, read manually: `curl -s "http://<host>:<port>/server-info" | less`; any path/alias disclosed → `echo '<path>' >> unauth_paths_<host>.txt`.
 - `403` — loaded, restricted. `echo 'RESTRICTED: /server-info' >> route_<ip>.txt`.
 - `404` — `mod_info` off/absent. No action.
+
+##### nginx stub_status
+
+`for sp in nginx_status nginx-status basic_status status stub_status; do code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://$host:$port/$sp"); [ "$code" = "200" ] && curl -s --max-time 5 "http://$host:$port/$sp" | grep -q 'server accepts handled requests' && echo "STUB_STATUS: /$sp (HTTP 200)"; [ "$code" = "403" ] && echo "STUB_STATUS_RESTRICTED: /$sp"; done; echo "STUB_STATUS_PROBE_COMPLETE"`
+
+Route per marker:
+
+- `STUB_STATUS: <path> (HTTP 200)` — exposed. No version, no paths, no config in the body; log only: `echo 'INFO_DISCLOSURE: <path> (nginx stub_status)' >> route_<ip>.txt`. ⚠️ Engagement report finding, not a foothold route.
+- `STUB_STATUS_RESTRICTED: <path>` — `echo 'RESTRICTED: <path>' >> route_<ip>.txt`; re-attempt via any localhost-origin primitive (e.g. SSRF) found later.
+- `STUB_STATUS_PROBE_COMPLETE` with no other markers — `stub_status` absent or at a non-conventional location. No action.
+
+---
 
 ---
 
@@ -540,36 +564,30 @@ Route on `$code`:
 
 ## Step 7 — Active content discovery
 
-> **STATUS (this step): AUDITED** — 7.1 derived 2026-09-19; 7.2 re-derived 2026-10-12, (f) reworked 2026-10-13, (g) re-derived 2026-10-14. Primary sources: OWASP WSTG-INFO-04/06 + API Reconnaissance, PortSwigger Content Discovery + API testing, HackTricks, PayloadsAllTheThings, feroxbuster/ffuf/SecLists docs. Mechanics sandbox-verified; tool flags confirmed on Kali 2026-10-12/13. (f) live-run on THM `Modern Web Stacks` + `Web Server Attacks - I`; **(g)'s routing is derived but never run**. Live-validation pending. Not CANONICAL.
+> **STATUS (this step): AUDITED** — 7.1 derived 2026-09-19, reworked 2026-10-14; 7.2 re-derived 2026-10-12, (f) reworked 2026-10-13, (g) re-derived 2026-10-14. Primary sources: OWASP WSTG-INFO-04/06 + API Reconnaissance, PortSwigger Content Discovery + API testing, HackTricks, PayloadsAllTheThings, feroxbuster/ffuf/SecLists docs. Mechanics sandbox-verified; tool flags confirmed on Kali 2026-10-12/13/14. (f) live-run on THM `Modern Web Stacks` + `Web Server Attacks - I`; **(g)'s routing is derived but never run**. Live-validation pending. Not CANONICAL.
 
 Actively enumerate paths the app didn't advertise. Two mechanisms: recursive wordlist enumeration (7.1) and API endpoint enumeration (7.2). All hits reach `unauth_paths_<host>.txt` — 7.1 directly, 7.2 via its own API accumulator — and the re-fire at the Step 7 boundary dispatches Passive Recon (Step 3), Input Surface (Step 4) and Auth-form processing (Step 5).
 
 ### 7.1 Recursive wordlist enumeration
 
-**Tool: feroxbuster.** Native recursion (default-enabled). Kali 2020.4+ default install. Fallback below.
+#### **Feroxbuster** 
 
-Select extension set per server-side stack identified in Step 2 (Version-discovery route). If stack unknown, use wide-net.
+Run both passes. Pass 2 is not conditional on Pass 1's result.
 
-#### **Choose one — feroxbuster invocation:**
+###### Pass 1 — bare words + extensions:
 
-- **PHP stack**:
-  `feroxbuster -u "http://<host>:<port>" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,phtml,php3,php4,php5,inc,html,txt,js,json,bak,log,conf,env,old,orig -d 4 --auto-tune -o feroxbuster_<ip>_<port>.txt`
+`feroxbuster -u "http://$host:$port" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,phtml,php3,php4,php5,asp,aspx,ashx,asmx,jsp,jspx,do,action,py,inc,html,xml,txt,js,json,config,conf,env,bak,old,orig,log -d 4 --auto-tune -o feroxbuster_<ip>_$port.txt`
 
-- **ASP.NET stack**:
-  `feroxbuster -u "http://<host>:<port>" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x aspx,asp,ashx,asmx,config,html,txt,js,json,bak,log,old -d 4 --auto-tune -o feroxbuster_<ip>_<port>.txt`
+###### Pass 2 — trailing slash, no extensions:
 
-- **Java/JSP stack**:
-  `feroxbuster -u "http://<host>:<port>" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x jsp,jspx,do,action,xml,html,txt,js,json,bak,log,conf,old -d 4 --auto-tune -o feroxbuster_<ip>_<port>.txt`
+`feroxbuster -u "http://$host:$port" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -f -d 4 --auto-tune -o feroxbuster_slash_<ip>_$port.txt`
 
-- **Node.js / Python stack**:
-  `feroxbuster -u "http://$host:$port" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x js,json,txt,bak,log,env,conf,old,py -d 4 --auto-tune -o feroxbuster_<ip>_$port.txt`
+`-d 4` caps recursion depth. 
+`-f` appends `/` to each request's URL, replacing the bare form rather than adding a second variant. 
 
-- **Stack unknown** (wide-net fallback):
-  `feroxbuster -u "http://$host:$port" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,aspx,jsp,html,txt,js,json,bak,log,conf,inc,env,old,orig,py -d 4 --auto-tune -o feroxbuster_<ip>_<port>.txt`
+ ⚠️ Feroxbuster shows all status codes; it suppresses the not-found wall by auto-building a wildcard filter from that response's signature (lines/words/chars) — the `… created new filter` lines are this calibration, not findings. Any response deviating from the signature (a non-404, or a 404 of a different size) is shown.
 
-`-d 4` caps recursion depth. Feroxbuster shows all status codes; it suppresses the not-found wall by auto-building a wildcard filter from that response's signature (lines/words/chars) — the `… created new filter` lines are this calibration, not findings. Any response deviating from the signature (a non-404, or a 404 of a different size) is shown.
-
-**Overlays:**
+##### ⚠️ Professional Engagement Overlays:
 - ⚠️ Rate-limit (real engagement, WAF suspected): append `-t 5 --rate-limit 10` (5 threads, 10 req/sec) ⚠️.
 - Same-length noise (server returns 200 for missing paths): feroxbuster's automatic wildcard filter handles most (see body); manual `-C <length>` filters a specific response length.
 
@@ -584,20 +602,22 @@ Select extension set per server-side stack identified in Step 2 (Version-discove
 
 Feroxbuster run only — skip if gobuster fallback was used.
 
-Read `errors:<errors>` and the request total from feroxbuster's overall completion line (`<total>/<total> … found:… errors:<errors>`), then:
+Run once per Feroxbuster pass. For each, read `errors:<errors>` and the request total from that pass's own overall completion line (`<total>/<total> … found:… errors:<errors>`), then:
 
 `awk -v e=<errors> -v t=<total> 'BEGIN{r=e/t*100; printf "%.3f%% errored — %s\n", r, (r>0.5?"RERUN":"PROCEED")}'`
 
 Route on verdict:
 
-- `PROCEED` → continue to per-hit processing.
-- `RERUN` → rerun this leg once with `-t 10`, then continue to per-hit processing.
+- `PROCEED` → that pass is clear.
+- `RERUN` → rerun that pass's invocation once with `-t 10`, overwriting its own output file.
+
+Per-hit processing starts once both passes are clear.
 
 #### **Per-hit processing** — five small single-purpose commands:
 
 ##### (a) Extract hit URLs to a working file:
 
-`awk '/^[0-9]{3}[[:space:]]/ {print $NF}' feroxbuster_<ip>_$port.txt | sort -u > hits_<ip>_$port.txt`
+`awk '/^[0-9]{3}[[:space:]]/ && $NF ~ /^https?:\/\// {print $NF}' feroxbuster_<ip>_$port.txt feroxbuster_slash_<ip>_$port.txt | sort -u > hits_<ip>_$port.txt`
 
 ##### (b) Add every hit path to `unauth_paths_<host>.txt`:
 
@@ -605,7 +625,7 @@ Route on verdict:
 
 ##### (c) Autoindex detection loop — extract directory listings:
 
-`grep 'directory listing' feroxbuster_<ip>_$port.txt | sed -E 's|^.*directory listing: |AUTOINDEX: |'`
+`grep 'directory listing' feroxbuster_<ip>_$port.txt feroxbuster_slash_<ip>_$port.txt | sed -E 's|^.*directory listing: |AUTOINDEX: |'`
 
 For each `AUTOINDEX: <url>` line, record to `route_<ip>.txt`.
 ##### (d) High-value file inspection
@@ -635,7 +655,7 @@ Route per marker:
 
 ##### (e) 403 handling — surface for later credential re-use:
 
-`out=$(awk '/^403[[:space:]]/ {print $NF}' feroxbuster_<ip>_$port.txt); if [ -n "$out" ]; then echo "$out" | while read u; do path=$(echo "$u" | sed -E "s|^https?://$host(:$port)?||"); echo "RESTRICTED: $path"; done; else echo "NO_403_HITS"; fi`
+`out=$(awk '/^403[[:space:]]/ {print $NF}' feroxbuster_<ip>_$port.txt feroxbuster_slash_<ip>_$port.txt); if [ -n "$out" ]; then echo "$out" | while read u; do path=$(echo "$u" | sed -E "s|^https?://$host(:$port)?||"); echo "RESTRICTED: $path"; done; else echo "NO_403_HITS"; fi`
 
 Route per marker:
 
