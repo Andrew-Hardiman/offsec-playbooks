@@ -1,5 +1,5 @@
 
-> **STATUS: FORMAT-ONLY** — three-set structural restructure applied 2026-09-19; Step 7 (Active content discovery) fully first-principles + primary-source audited (7.1 2026-09-19, 7.2 2026-09-22); remaining sub-blocks structurally reshaped from pre-audit state, per-sub-block first-principles derivation INCOMPLETE. Live-validation pending. Not CANONICAL.
+> **STATUS: FORMAT-ONLY** — three-set structural restructure applied 2026-09-19; Step 7 (Active content discovery) fully first-principles + primary-source audited (7.1 2026-09-19, 7.2 re-derived 2026-10-12); remaining sub-blocks structurally reshaped from pre-audit state, per-sub-block first-principles derivation INCOMPLETE. Live-validation pending. Not CANONICAL.
 
 Routes HTTP/HTTPS service to web attack technique walkthroughs. Pure router — attack content lives in per-technique files.
 
@@ -132,11 +132,11 @@ When exploration complete: right-click on a request row within the Network tab �
 
 Curl-sweep HAR-captured target-host HTMLpages for embedded hrefs (catches paths advertised but not clicked; MIME-filter reduces waste on binary responses):
 
-`jq -r --arg h "<host>" --arg p "<port>" '.log.entries[] | select(.request.url | test("^https?://" + $h + "(:" + $p + ")?/")) | select(.response.content.mimeType // "" | startswith("text/html")) | .request.url' unauth_crawl_<host>.har | sed -E "s|^https?://<host>(:<port>)?||" | grep -E '^/([^/]|$)' | sort -u | while read fetch_p; do curl -s --max-time 5 "http://<host>:<port>${fetch_p}" | grep -oiE 'href=["'"'"'][^"'"'"']+'; done | sort -u > unauth_hrefs_<host>.txt`
+`jq -r --arg h "$host" --arg p "$port" '.log.entries[] | select(.request.url | test("^https?://" + $h + "(:" + $p + ")?/")) | select(.response.content.mimeType // "" | startswith("text/html")) | .request.url' unauth_crawl_$host.har | sed -E "s|^https?://$host(:$port)?||" | grep -E '^/([^/]|$)' | sort -u | while read fetch_p; do curl -s --max-time 5 "http://$host:$port${fetch_p}" | grep -oiE 'href=["'"'"'][^"'"'"']+'; done | sort -u > unauth_hrefs_$host.txt`
 
 Combine target-host URLs from HAR with extracted hrefs, filtering to target-host paths only (rejects third-party CDN URLs, protocol-relative URLs, mailto/tel/javascript/fragment hrefs):
 
-`{ jq -r --arg h "<host>" --arg p "<port>" '.log.entries[] | select(.request.url | test("^https?://" + $h + "(:" + $p + ")?/")) | .request.url' unauth_crawl_<host>.har 2>/dev/null; sed -E 's|^href=["'"'"']||' unauth_hrefs_<host>.txt; } | sed -E "s|^https?://<host>(:<port>)?||" | grep -E '^/([^/]|$)' | sort -u > unauth_paths_<host>.txt`
+`{ jq -r --arg h "$host" --arg p "$port" '.log.entries[] | select(.request.url | test("^https?://" + $h + "(:" + $p + ")?/")) | .request.url' unauth_crawl_$host.har 2>/dev/null; sed -E 's|^href=["'"'"']||' unauth_hrefs_$host.txt; } | sed -E "s|^https?://$host(:$port)?||" | grep -E '^/([^/]|$)' | sort -u > unauth_paths_$host.txt`
 
 Route:
 
@@ -145,7 +145,7 @@ Route:
 
 Seed walked file — marks all Step-1-discovered paths as already-covered by Passive Recon (Step 3) initial iteration; end-of-Step-5-onward re-fires drain only paths discovered post-Step-1:
 
-`cp unauth_paths_<host>.txt unauth_paths_<host>.txt.walked`
+`cp unauth_paths_$host.txt unauth_paths_$host.txt.walked`
 
 ---
 
@@ -281,9 +281,9 @@ Enumerate every input the app exposes — URL query parameters and HTML form con
 
 Batch both scripts over the master path list:
 
-`~/scripts/url_params_enum.py --base http://$host:$port --paths unauth_paths_$host.txt --verbose >> url_params_$host.txt`
+`~/scripts/url_params_enum.py --base http://$host:$port --paths unauth_paths_<host>.txt --verbose >> url_params_$host.txt`
 
-`~/scripts/form_enum.py --base http://$host:$port --paths unauth_paths_$host.txt --verbose >> form_enum_$host.txt`
+`~/scripts/form_enum.py --base http://$host:$port --paths unauth_paths_<host>.txt --verbose >> form_enum_$host.txt`
 
 ⚠️ **JS-tripwire:** `form_enum.py` flags pages whose forms may be JS-built (they won't appear in its output). If a form visible in the browser is missing from the output, capture it from HAR/Burp and route it manually.
 
@@ -540,9 +540,9 @@ Route on `$code`:
 
 ## Step 7 — Active content discovery
 
-> **STATUS (this step): AUDITED** — first-principles + primary-source derivation. 7.1: OWASP WSTG-INFO-04/06, PortSwigger Content Discovery, HackTricks Directory Brute Force, PayloadsAllTheThings, feroxbuster/gobuster/SecLists docs. 7.2: OWASP WSTG API Reconnaissance, SecLists api-endpoints.txt, GraphQL introspection. Sandbox-verified mechanics — 7.1: autoindex/credential/endpoint/href/output parsing; 7.2: jq spec-parse (OpenAPI-3 servers + Swagger-2 basePath prefixing, HTML-UI rejection), GraphQL introspection detection, content-type JSON classification. Tool-flag correctness (feroxbuster/gobuster/jq/curl) verification-pending until first live run; live-validation on ≥1 real target pending. Not yet CANONICAL.
+> **STATUS (this step): AUDITED** — 7.1 derived 2026-09-19; 7.2 re-derived 2026-10-12, (f) reworked 2026-10-13, (g) re-derived 2026-10-14. Primary sources: OWASP WSTG-INFO-04/06 + API Reconnaissance, PortSwigger Content Discovery + API testing, HackTricks, PayloadsAllTheThings, feroxbuster/ffuf/SecLists docs. Mechanics sandbox-verified; tool flags confirmed on Kali 2026-10-12/13. (f) live-run on THM `Modern Web Stacks` + `Web Server Attacks - I`; **(g)'s routing is derived but never run**. Live-validation pending. Not CANONICAL.
 
-Actively enumerate paths the app didn't advertise. Two mechanisms: recursive wordlist enumeration (7.1) and API endpoint enumeration (7.2). All hits append to `unauth_paths_<host>.txt` — re-fire at Step 7 boundary dispatches Passive Recon (Step 3) and Auth-form Per-path processing (Step 5).
+Actively enumerate paths the app didn't advertise. Two mechanisms: recursive wordlist enumeration (7.1) and API endpoint enumeration (7.2). All hits reach `unauth_paths_<host>.txt` — 7.1 directly, 7.2 via its own API accumulator — and the re-fire at the Step 7 boundary dispatches Passive Recon (Step 3), Input Surface (Step 4) and Auth-form processing (Step 5).
 
 ### 7.1 Recursive wordlist enumeration
 
@@ -562,10 +562,10 @@ Select extension set per server-side stack identified in Step 2 (Version-discove
   `feroxbuster -u "http://<host>:<port>" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x jsp,jspx,do,action,xml,html,txt,js,json,bak,log,conf,old -d 4 --auto-tune -o feroxbuster_<ip>_<port>.txt`
 
 - **Node.js / Python stack**:
-  `feroxbuster -u "http://$host:$port" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x js,json,txt,bak,log,env,conf,old,py -d 4 --auto-tune -o feroxbuster_${host}_$port.txt`
+  `feroxbuster -u "http://$host:$port" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x js,json,txt,bak,log,env,conf,old,py -d 4 --auto-tune -o feroxbuster_<ip>_$port.txt`
 
 - **Stack unknown** (wide-net fallback):
-  `feroxbuster -u "http://$host:$port" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,aspx,jsp,html,txt,js,json,bak,log,conf,inc,env,old,orig,py -d 4 --auto-tune -o feroxbuster_${host}_$port.txt`
+  `feroxbuster -u "http://$host:$port" -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,aspx,jsp,html,txt,js,json,bak,log,conf,inc,env,old,orig,py -d 4 --auto-tune -o feroxbuster_<ip>_<port>.txt`
 
 `-d 4` caps recursion depth. Feroxbuster shows all status codes; it suppresses the not-found wall by auto-building a wildcard filter from that response's signature (lines/words/chars) — the `… created new filter` lines are this calibration, not findings. Any response deviating from the signature (a non-404, or a 404 of a different size) is shown.
 
@@ -597,15 +597,15 @@ Route on verdict:
 
 ##### (a) Extract hit URLs to a working file:
 
-`awk '/^[0-9]{3}[[:space:]]/ {print $NF}' feroxbuster_${host}_$port.txt | sort -u > hits_${host}_$port.txt`
+`awk '/^[0-9]{3}[[:space:]]/ {print $NF}' feroxbuster_<ip>_$port.txt | sort -u > hits_<ip>_$port.txt`
 
 ##### (b) Add every hit path to `unauth_paths_<host>.txt`:
 
-`sed -E "s|^https?://<host>(:<port>)?||" hits_<ip>_<port>.txt >> unauth_paths_<host>.txt && sort -u unauth_paths_<host>.txt -o unauth_paths_<host>.txt`
+`sed -E "s|^https?://$host(:$port)?||" hits_<ip>_$port.txt >> unauth_paths_$host.txt && sort -u unauth_paths_$host.txt -o unauth_paths_$host.txt`
 
 ##### (c) Autoindex detection loop — extract directory listings:
 
-`grep 'directory listing' feroxbuster_<ip>_<port>.txt | sed -E 's|^.*directory listing: |AUTOINDEX: |'`
+`grep 'directory listing' feroxbuster_<ip>_$port.txt | sed -E 's|^.*directory listing: |AUTOINDEX: |'`
 
 For each `AUTOINDEX: <url>` line, record to `route_<ip>.txt`.
 ##### (d) High-value file inspection
@@ -616,7 +616,7 @@ Create the local inspection dir:
 
 Download every hit (**relies on `(a) Extract hit URLs....`, above, having been successfully run**) except HTML pages and media:
 
-`grep -vE '\.(html?|png|jpe?g|gif|svg|ico|webp|bmp|tiff?|avif|css|woff2?|ttf|otf|eot|mp[34]|m4[av]|webm|wav|ogg|oga|flac|aac|avi|mov|mkv|wmv|flv)$|/$' hits_${host}_$port.txt | while read -r url; do curl -s -L -O --output-dir inspect_${host}_$port "$url"; done`
+`grep -vE '\.(html?|png|jpe?g|gif|svg|ico|webp|bmp|tiff?|avif|css|woff2?|ttf|otf|eot|mp[34]|m4[av]|webm|wav|ogg|oga|flac|aac|avi|mov|mkv|wmv|flv)$|/$' hits_<ip>_$port.txt | while read -r url; do curl -s -L -O --output-dir inspect_${host}_$port "$url"; done`
 
 Inspect the tree:
 
@@ -626,7 +626,7 @@ Route per marker:
 
 - `FILE_CRED: <path>: <match>` — verify (may be a placeholder like `changeme` / `<PASSWORD>`); real credential → `echo '<user>:<pass>' >> creds_<host>.txt`; log `echo 'FILE_CRED: <path>: <match>' >> route_<ip>.txt`.
 - `SECRET: <path>: <type>:<value>` — route by `<type>`: `jwt` → [[Session Cookie Attacks]] (JWT branch); `bearer` / `token` → reuse as an `Authorization` header on auth-gated requests; `aws_akid` / `api_key` / `google_api_key` / `slack_token` / `pem_private_key` / `secret` → note for the matching service, reuse when that service surfaces. Log to `route_<ip>.txt`.
-- `ENDPOINT_REF: <path>: <ref>` — new attack surface → `echo '<ref>' >> unauth_paths_<host>.txt` (re-fire drains at the Step 7 boundary). A `${...}` / `:param` stub is a 7.2 positional-fuzz seed, not a literal probe.
+- `ENDPOINT_REF: <path>: <ref>` — new attack surface → `echo '<ref>' >> unauth_paths_<host>.txt` (re-fire drains at the Step 7 boundary). A `${...}` / `:param` stub is a 7.2(f) segment-swap template, not a literal probe.
 - `ARCHIVE_NESTED: <path>` — the retrieved file is itself an archive → 7.3 loot: extract to a sandbox dir, then re-run the inspector over the extracted tree.
 - `MANUAL_REVIEW: <path>` — file read OK; eyeball the local copy at `inspect_<ip>_<port>/…` for what the regexes do not catch (stack traces, framework hints, usernames, source disclosure in `.bak` / `.old` / `.orig` / `~`).
 - `FLAG: <path>: <value>` — CTF flag.
@@ -635,7 +635,7 @@ Route per marker:
 
 ##### (e) 403 handling — surface for later credential re-use:
 
-`out=$(awk '/^403[[:space:]]/ {print $NF}' feroxbuster_<ip>_<port>.txt); if [ -n "$out" ]; then echo "$out" | while read u; do path=$(echo "$u" | sed -E "s|^https?://<host>(:<port>)?||"); echo "RESTRICTED: $path"; done; else echo "NO_403_HITS"; fi`
+`out=$(awk '/^403[[:space:]]/ {print $NF}' feroxbuster_<ip>_$port.txt); if [ -n "$out" ]; then echo "$out" | while read u; do path=$(echo "$u" | sed -E "s|^https?://$host(:$port)?||"); echo "RESTRICTED: $path"; done; else echo "NO_403_HITS"; fi`
 
 Route per marker:
 
@@ -646,7 +646,7 @@ Route per marker:
 
 ##### (f) `.git` metadata — surface for git-dumper (out of Step 7 scope):
 
-`out=$(grep -E '/\.git/(HEAD|config|index)$' hits_<ip>_<port>.txt); if [ -n "$out" ]; then echo "$out" | while read u; do echo "GIT_LEAK: $u — run 'git-dumper <base_git_url> ./gitdump-<ip>' (out of Step 7)"; done; else echo "NO_GIT_LEAK"; fi`
+`out=$(grep -E '/\.git/(HEAD|config|index)$' hits_<ip>_$port.txt); if [ -n "$out" ]; then echo "$out" | while read u; do echo "GIT_LEAK: $u — run 'git-dumper <base_git_url> ./gitdump-<ip>' (out of Step 7)"; done; else echo "NO_GIT_LEAK"; fi`
 
 Route per marker:
 
@@ -660,94 +660,209 @@ Then → 7.2.
 
 ### 7.2 API endpoint enumeration
 
-> ⚠️ **Brute has a categorical blind spot: deep, custom, sparsely-routed endpoints.** A path that isn't a literal wordlist entry and whose parents 404 (recursion can't reach it — `--force-recursion` included) is never requested — a property of the technique, not a tuning gap. Recover such paths from what the app discloses (spec/GraphQL `(c)`/`(d)`, client code, observed traffic, source/error leaks, authed view) or via `ffuf` positional fuzz off a known prefix.
-> **Tripwire:** first time a known/suspected endpoint won't surface → log `DEFERRED: api-discovery-blindspot: <detail>` in `route_<ip>.txt`, work around it, move on. Second occurrence → build the fix; do not ignore it again.
-> Full derivation + deferred-build decision: [[API Endpoint Discovery - Brute-Force Limits]]
+> **STATUS (this sub-step): AUDITED** — re-derived 2026-10-12 from first principles + primary sources re-read this session: OWASP WSTG `12-API_Testing/01-API_Reconnaissance` and PortSwigger _API testing_. Both order discovery as spec/docs → passive → observed traffic → client-side code → **active brute last**; this sub-step follows that order. Supersedes the prior feroxbuster-first 7.2 and the deferred positional-fuzz build. Derivation + what changed: [[API Endpoint Discovery - Brute-Force Limits]].
 
-#### feroxbuster invocation:
+> ⚠️ **Blind path brute cannot assemble a deep, custom, sparsely-routed endpoint.** A path that is not a literal wordlist entry and whose parents 404 is never requested — recursion needs each rung non-404, and a REST backend routes only the leaf. Property of the technique, not a tuning gap. Consequence for this sub-step: **brute is the backstop, not the primary method** — (a)–(d) below carry the yield; (e)/(f) are the sweep. Full derivation: [[API Endpoint Discovery - Brute-Force Limits]].
 
-`feroxbuster -u "http://<host>:<port>" -w /usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt -d 4 --auto-tune -o feroxbuster_api_<ip>_<port>.txt`
+All discovered endpoints append to `unauth_api_paths_<host>.txt` — this host's API attack surface. (g) classifies every entry, then merges the file into `unauth_paths_<host>.txt`, where the Step 7 boundary re-fire dispatches Passive Recon (Step 3), Input Surface (Step 4) and Auth-form processing (Step 5) over each.
 
-`-d 4` caps recursion depth. Feroxbuster shows all status codes; it suppresses the not-found wall by auto-building a wildcard filter from that response's signature (lines/words/chars) — the `… created new filter` lines are this calibration, not findings. Any response deviating from the signature (a non-404, or a 404 of a different size) is shown.
+---
 
-**Overlays:**
-- ⚠️ Rate-limit (real engagement, WAF suspected): append `-t 5 --rate-limit 10` (5 threads, 10 req/sec).
-- Same-length noise (server returns 200 for missing paths): feroxbuster's automatic wildcard filter handles most (see body); manual `-C <length>` filters a specific response length.
+##### (a) Spec / documentation discovery — one hit, full documented surface
 
-⚠️ **Stack-conditional doc paths** — only if Step 2 fingerprinted the stack. Probe the matching stack's path(s); any 200 → append the URL to `hits_api_<ip>_<port>.txt` and run (c) against it.
+###### Probe curated spec paths:
 
-- Java/Spring → `/v2/api-docs`, `/v3/api-docs`
-- .NET → `/swagger/v1/swagger.json`
+`for sp in api-docs doc docs swagger swagger.json swagger/index.html swagger/v1/swagger.json openapi.json openapi.yaml v2/api-docs v3/api-docs api/swagger.json api/openapi.json .well-known/schema-discovery; do code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://$host:$port/$sp"); [ "$code" = "200" ] && echo "http://$host:$port/$sp"; done > spec_candidates_${host}_$port.txt; printf 'SPEC_CANDIDATES: %s\n' "$(wc -l < spec_candidates_${host}_$port.txt)"`
 
-#### Gobuster fallback — if feroxbuster unavailable:
+- `SPEC_CANDIDATES: 0` — no spec exposed → skip the `Parse every candidate` command below → (b).
+- `SPEC_CANDIDATES:` non-zero → proceed to `Parse every candidate` command below.
 
-`gobuster dir -u "http://<host>:<port>" -w /usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt -o gobuster_api_<ip>_<port>.txt`
+###### Parse every candidate:
 
-Gobuster does NOT recurse. For every 200/301/302 hit on a directory-shape path (`/api`, `/api/v1`, …), manually re-invoke against it:
-`gobuster dir -u "http://<host>:<port>/<discovered_dir>/" -w /usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt -o gobuster_api_<ip>_<port>_<slug>.txt`
+`while read -r specurl; do spec=$(curl -s -H 'Accept: application/json' "$specurl"); if echo "$spec" | jq -e 'has("openapi") or has("swagger")' >/dev/null 2>&1; then echo "SPEC_FOUND: $specurl"; echo "$spec" | jq -r '((.servers[0].url // "") | sub("^https?://[^/]+";"")) as $base | (if $base != "" then $base else (.basePath // "") end) as $prefix | .paths | keys[] | $prefix + .' 2>/dev/null >> unauth_api_paths_<host>.txt; ver=$(echo "$spec" | jq -r '.info.version // empty' 2>/dev/null); [ -n "$ver" ] && echo "SPEC_VERSION: $specurl: $ver"; else case "$specurl" in *.yaml|*.yml) echo "SPEC_YAML_MANUAL: $specurl";; *) echo "NOT_SPEC: $specurl";; esac; fi; done < spec_candidates_${host}_$port.txt; echo "SPEC_PARSE_COMPLETE"`
 
-#### Error gate — run before per-hit processing:
+Route per marker:
 
-Feroxbuster run only — skip if gobuster fallback was used.
+- `SPEC_FOUND: <url>` — every documented endpoint appended to `unauth_api_paths_<host>.txt`. Highest yield in 7.2. Also probe the spec's **older versions** (`/v1/`, `/v2/` siblings of the found path) — deprecated-but-live endpoints.
+- `SPEC_VERSION: <url>: <version>` — apply **Version-discovery route**.
+- `SPEC_YAML_MANUAL: <url>` — jq parses JSON only; read the YAML by eye, append its `paths:` keys to `unauth_api_paths_<host>.txt`.
+- `NOT_SPEC: <url>` — 200 but not a spec document (usually the Swagger-UI HTML shell, not its backing JSON). Its spec is a separate candidate; no action.
 
-Read `errors:<errors>` and the request total from feroxbuster's overall completion line (`<total>/<total> … found:… errors:<errors>`), then:
+##### (b) Route-dumper / debug-endpoint probe — one hit, full route table
+
+`for rp in api/routes api/_routes api/debug api/debug/routes api/debug/env __routes _routes actuator actuator/mappings actuator/env debug/routes api/v1/routes api/internal/routes; do code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: application/json' --max-time 5 "http://$host:$port/$rp"); [ "$code" = "200" ] && echo "ROUTE_DUMP: /$rp"; done; echo "ROUTE_DUMP_PROBE_COMPLETE"`
+
+Route per marker:
+
+- `ROUTE_DUMP: <path>` — read it (`curl -s -H 'Accept: application/json' "http://$host:$port<path>" | head -200`); extract every route string and append to `unauth_api_paths_$host.txt`. An `env`/`actuator/env` dump is also a **secrets** source — route each recovered value by type:
+    - Credential pair / DB connection string (`<user>:<pass>`) → `echo '<user>:<pass>' >> creds_$host.txt`
+    - JWT → [[Session Cookie Attacks]] (JWT branch)
+    - Bearer / token → reuse as `Authorization: Bearer <value>` on auth-gated requests
+    - API key / AWS key / PEM private key / `SECRET_KEY` → log, reuse when the matching service surfaces
+    - Log each recovered secret to `route_<ip>.txt`
+- `ROUTE_DUMP_PROBE_COMPLETE` with no hits — no self-dumping endpoint → (c).
+
+##### (c) GraphQL detection → route
+
+`for gp in graphql graphiql playground api/graphql v1/graphql; do tn=$(curl -s -H 'Content-Type: application/json' -d '{"query":"{__typename}"}' --max-time 5 "http://$host:$port/$gp" | jq -r '.data.__typename // empty' 2>/dev/null); [ -z "$tn" ] && continue; curl -s -H 'Content-Type: application/json' -d '{"query":"{__schema{queryType{name}}}"}' "http://$host:$port/$gp" | jq -e '.data.__schema' >/dev/null 2>&1 && intro=on || intro=off; echo "GRAPHQL: /$gp (introspection=$intro)"; done; echo "GRAPHQL_PROBE_COMPLETE"`
+
+Route per marker:
+
+- `GRAPHQL: <path> (introspection=on)` — schema fully dumpable → [[GraphQL Attacks]] (introspection dump + query/mutation abuse).
+- `GRAPHQL: <path> (introspection=off)` — confirmed GraphQL, introspection disabled → [[GraphQL Attacks]] (field-suggestion / clairvoyance path).
+- A GraphQL endpoint is **terminal API surface** — append the path to `unauth_api_paths_<host>.txt`; never feed it to (f) segment-swap (its surface is a schema, not path segments).
+- `GRAPHQL_PROBE_COMPLETE` with no hits — no GraphQL endpoint → (d).
+
+##### (d) Client-code harvest — endpoints from the shipped JS
+
+Harvests endpoint strings from the application's shipped client code. High yield on SPA / JS-heavy targets: the shipped bundles expose the endpoints the UI calls, including paths brute cannot reach. ⚠️ **Requires Step 1's HAR**.
+
+###### Collect JS source URLs (HAR ∪ already-discovered pool), dedup:
+
+`{ jq -r --arg h "$host" --arg p "$port" '.log.entries[] | select(.request.url | test("^https?://" + $h + "(:" + $p + ")?/")) | select(((.response.content.mimeType // "") | ascii_downcase | test("javascript|ecmascript")) or ((.request.url | split("?")[0]) | test("\\.(js|mjs|cjs)$"))) | .request.url' unauth_crawl_$host.har 2>/dev/null; grep -iE '\.(js|mjs|cjs)(\?|$)' unauth_paths_$host.txt | sed -E "s#^/#http://$host:$port/#"; } | sort -u > js_urls_${host}_$port.txt; printf 'JS_SOURCES: %s\n' "$(wc -l < js_urls_${host}_$port.txt)"`
+
+- `JS_SOURCES: 0` — no shipped JS surfaced; log `INAPPLICABLE: client-code-harvest: no JS sources` to `route_<ip>.txt` → (e).
+
+###### Retrieve each bundle and its sibling source map, path-preserving:
+
+Create the local harvest dir: 
+
+`mkdir -p harvest_${host}_$port`
+
+`while read -r url; do [ -z "$url" ] && continue; rel=$(printf '%s' "$url" | sed -E "s#^https?://[^/]+/##; s/\?.*$//"); dest="harvest_${host}_$port/$rel"; mkdir -p "$(dirname "$dest")"; curl -s -L --max-time 10 -o "$dest" "$url"; mapcode=$(curl -s -L --max-time 10 -o "${dest}.map" -w '%{http_code}' "${url%%\?*}.map"); [ "$mapcode" = "200" ] || rm -f "${dest}.map"; done < js_urls_${host}_$port.txt`
+
+Inspect the harvested tree:
+
+`~/scripts/local_file_inspector.py harvest_<host>_<port>`
+
+Route per marker (contract as 7.1(d)):
+
+- `ENDPOINT_REF: <path>: <ref>` — split by shape:
+    - **Static** ref (no `${...}` / `:param`) → `echo '<ref>' >> unauth_api_paths_<host>.txt`
+    - **Dynamic stub** (contains `${...}` or `:param`, e.g. `/api/${id}/update`) → an **(f) segment-swap template**, NOT a literal probe. If the hole is an identifier (`id`/`uuid`/`guid`/`userId`) → [[IDOR]] instead.
+    - `/graphql`-shaped → `unauth_api_paths_<host>.txt` + (c) GraphQL routing.
+- `SECRET: <path>: <type>:<value>` — hardcoded secret in a bundle (common). Route by `<type>` per 7.1(d).
+- `FILE_CRED: <path>: <match>` — verify (may be a placeholder); real → `echo '<user>:<pass>' >> creds_<host>.txt`.
+- `FLAG: <path>: <value>` — capture; log `FLAG_FOUND: <path>: <value>` to `route_<ip>.txt`.
+- `MANUAL_REVIEW: <path>` — eyeball the bundle; in particular GraphQL operation/field names (`query getAdminFlag {...}`), which are not `/`-paths and will not surface as `ENDPOINT_REF` → [[GraphQL Attacks]].
+- `READ_FAIL: <path>: <reason>` — empty/unreadable fetch or over the inspector's size cap → re-fetch manually.
+
+##### (e) Curated-route brute — the backstop sweep
+
+Entries are **full curated routes**, not words to combine — so no recursion and no combinatorial assembly. Multi-method (`-m GET,POST`): a POST-only route is invisible to a GET-only sweep
+
+`feroxbuster -u "http://$host:$port" -w /usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt -m GET,POST -d 1 --auto-tune -o feroxbuster_api_<ip>_$port.txt`
+
+`-d 1` disables recursion (entries are already full paths). `--auto-tune` + feroxbuster's per-method signature wildcard filter suppress the not-found wall; the filter is keyed on the response **signature (lines/words/chars)**, one filter per method — it therefore also catches a soft-404 (200/302 not-found) and an SPA wildcard (`200 + index.html`), which a status-only filter cannot.
+
+###### Error gate. Read `errors:<errors>` and the request total from the completion line, then:
 
 `awk -v e=<errors> -v t=<total> 'BEGIN{r=e/t*100; printf "%.3f%% errored — %s\n", r, (r>0.5?"RERUN":"PROCEED")}'`
 
-Route on verdict:
+- `PROCEED` → per-hit processing. 
+- `RERUN` → rerun this leg once with `-t 10`, then continue.
 
-- `PROCEED` → continue to per-hit processing.
-- `RERUN` → rerun this leg once with `-t 10`, then continue to per-hit processing.
+###### Per-hit processing — strip hits to paths, append to the API accumulator:
 
-#### Per-hit processing:
+`awk '/^[0-9]{3}[[:space:]]/ {print $NF}' feroxbuster_api_<ip>_$port.txt | sed -E "s|^https?://$host(:$port)?||" | sort -u >> unauth_api_paths_$host.txt`
 
-##### (a) Extract hit URLs to a working file:
+⚠️ **Implausible hit count (hundreds+) means the not-found wall is leaking, not that the API is enormous** — the target's not-found response is defeating the signature filter. Do NOT route the results. Capture the not-found shape (`curl -s -o /dev/null -w 'status=%{http_code} size=%{size_download}\n' "http://<host>:<port>/<random>"`), then rerun with an explicit `-C <status>` or `--filter-size <n>`.
 
-`awk '/^[0-9]{3}[[:space:]]/ {print $NF}' feroxbuster_api_<ip>_<port>.txt | sort -u > hits_api_<ip>_<port>.txt`
+##### (f) Segment-swap — siblings and children of known endpoints, plus conventional roots
 
-##### (b) Add every hit path to `unauth_paths_<host>.txt`:
+###### Consolidate the API surface:
 
-`sed -E "s|^https?://<host>(:<port>)?||" hits_api_<ip>_<port>.txt >> unauth_paths_<host>.txt && sort -u unauth_paths_<host>.txt -o unauth_paths_<host>.txt`
+Pull the API-shaped paths (`/api/`, `/rest/`, `/vN/`) that earlier Steps left in `unauth_paths_$host.txt` into `unauth_api_paths_$host.txt`, so (f) swaps off the complete set:
 
-##### (c) Spec-doc parse — pull the full documented API surface from any OpenAPI/Swagger spec in one hit:
+`grep -E '^/(api|rest|v[0-9]+)/' unauth_paths_$host.txt >> unauth_api_paths_$host.txt; sort -u unauth_api_paths_$host.txt -o unauth_api_paths_$host.txt`
 
-`grep -iE '/(swagger|openapi|api-docs|v[23]/api-docs)' hits_api_<ip>_<port>.txt | sort -u | while read u; do spec=$(curl -s -H 'Accept: application/json' "$u"); if echo "$spec" | jq -e 'has("openapi") or has("swagger")' >/dev/null 2>&1; then echo "SPEC_FOUND: $u"; echo "$spec" | jq -r '((.servers[0].url // "") | sub("^https?://[^/]+";"")) as $s | (if $s != "" then $s else (.basePath // "") end) as $b | .paths | keys[] | $b + .' 2>/dev/null >> unauth_paths_<host>.txt; ver=$(echo "$spec" | jq -r '.info.version // empty' 2>/dev/null); [ -n "$ver" ] && echo "SPEC_VERSION: $u: $ver"; else case "$u" in *.yaml|*.yml) echo "SPEC_YAML_MANUAL: $u";; *) echo "NOT_SPEC: $u";; esac; fi; done`
+###### Build the API prefix list:
 
-Route per marker:
+Build the API prefix list — each discovered endpoint **and** its parent, plus conventional defaults (`/api`, `/api/admin`, `/api/user`, `/api/v1`, `/v1`, `/rest`), deduped:
 
-- `SPEC_FOUND: <url>` → every documented endpoint (server/basePath-prefixed) appended to `unauth_paths_<host>.txt`; re-fire at the Step 7 boundary dispatches Passive Recon (Step 3) + Auth-form processing (Step 5) over each. Highest yield in 7.2 — one hit, full surface.
-- `SPEC_VERSION: <url>: <version>` → apply **Version-discovery route**.
-- `SPEC_YAML_MANUAL: <url>` → jq parses JSON only; read the YAML spec by eye and append its `paths:` entries to `unauth_paths_<host>.txt` manually.
-- `NOT_SPEC: <url>` → 200 but not a real spec document (usually the Swagger-UI HTML shell, not its backing JSON) → no action; the UI's spec is a separate hit.
+`{ sed -E 's#/[^/]+$##' unauth_api_paths_$host.txt | grep -E '^/.'; grep -E '^/[^/]+/' unauth_api_paths_$host.txt; printf '/api\n/api/admin\n/api/user\n/api/v1\n/v1\n/rest\n'; } | sort -u > api_prefixes_$host.txt`
 
-##### (d) GraphQL detection → route:
+###### Build the segment vocabulary
 
-`grep -iE '/(graphql|graphiql|playground)' hits_api_<ip>_<port>.txt | sort -u | while read u; do tn=$(curl -s -H 'Content-Type: application/json' -d '{"query":"{__typename}"}' "$u" | jq -r '.data.__typename // empty' 2>/dev/null); [ -z "$tn" ] && continue; curl -s -H 'Content-Type: application/json' -d '{"query":"{__schema{queryType{name}}}"}' "$u" | jq -e '.data.__schema' >/dev/null 2>&1 && intro=on || intro=off; p=$(echo "$u" | sed -E "s|^https?://<host>(:<port>)?||"); echo "GRAPHQL: $p (introspection=$intro)"; done`
+Nouns ∪ verbs, both cases, pure-numeric entries excluded (numeric path segments belong to [[IDOR]], not this sub-block):
 
-Route per marker:
+`{ grep -xE '[A-Za-z][A-Za-z0-9_-]*' /usr/share/seclists/Discovery/Web-Content/api/objects.txt; cat /usr/share/seclists/Discovery/Web-Content/api/actions.txt; printf 'flag\nroutes\nroute\n'; } | sort -u > api_segments.txt; printf 'SEGMENT_VOCAB: %s\n' "$(wc -l < api_segments.txt)"`
 
-- `GRAPHQL: <path> (introspection=on)` → schema is fully dumpable → [[GraphQL Attacks]] (introspection dump + query/mutation abuse).
-- `GRAPHQL: <path> (introspection=off)` → confirmed GraphQL, introspection disabled → [[GraphQL Attacks]] (field-suggestion / clairvoyance path).
+###### Sweep every prefix — append one segment (GET + POST):
 
-##### (e) Auth-gated endpoint detection → route:
+`while read -r prefix; do ffuf -u "http://$host:$port${prefix}/FUZZSEG" -w api_segments.txt:FUZZSEG -t 20 -of json -o ffuf_scratch.json -s >/dev/null; jq -r '.results[]|"SWAP_HIT: GET \(.status) \(.url)"' ffuf_scratch.json 2>/dev/null; ffuf -u "http://$host:$port${prefix}/FUZZSEG" -w api_segments.txt:FUZZSEG -X POST -H 'Content-Type: application/json' -d '{}' -t 20 -of json -o ffuf_scratch.json -s >/dev/null; jq -r '.results[]|"SWAP_HIT: POST \(.status) \(.url)"' ffuf_scratch.json 2>/dev/null; done < api_prefixes_$host.txt; echo "SWAP_SWEEP_COMPLETE"`
 
-`awk '/^(401|403)[[:space:]]/ {print $NF}' feroxbuster_api_<ip>_<port>.txt | sort -u | while read u; do hint=$(curl -s -D - -o /dev/null "$u" | grep -oiE '(Bearer|JWT|OAuth|API-?Key)' | sort -u | head -1); p=$(echo "$u" | sed -E "s|^https?://<host>(:<port>)?||"); echo "AUTH_GATED_API: $p (auth=${hint:-none})"; done`
+⚠️ **A wall of SWAP_HIT lines (hundreds+) means the target soft-404s, not that you found an API.** ffuf's default matcher only excludes `404`; a target that answers unknown paths with `200` — an SPA wildcard serving `index.html`, or a 200 error page — matches on every segment in the vocabulary. Do **NOT** route the results. Diagnose the prefix that flooded: `curl -s -o /dev/null -w 'status=%{http_code} size=%{size_download}\n' "http://$host:$port<prefix>/zzrandomzz"` — a non-404 status confirms the soft-404. Re-run that prefix alone with `-fs <size>` taken from the probe. If the soft-404 size varies per path (it echoes the path back), size cannot pin it — use `-fw <words>` or `-fl <lines>` instead, which stay constant even when the body length moves.
 
-Route per marker:
+⚠️ **Known coverage gap (accepted).** This sweep fuzzes the **terminal** segment only — `<prefix>/FUZZSEG`. It does NOT swap an **interior** segment while holding a fixed suffix (`/api/FUZZSEG/get`), so it misses a sibling *resource* that exists only under the same trailing *action* — e.g. `/api/orders/get` inferred from a known `/api/users/get`. Single-position and tractable (one ffuf run), just not expressed by the append-only shape; dropped for simplicity, not cost. **If a real box surfaces a `/<prefix>/<resource>/<action>` where sibling resources under the same `<action>` are plausible, add one mid-swap run:** `ffuf -u "http://$host:$port<prefix>/FUZZSEG/<action>" -w api_segments.txt:FUZZSEG -t 20 -of json -o ffuf_scratch.json -s >/dev/null; jq -r '.results[]|"SWAP_HIT: GET \(.status) \(.url)"' ffuf_scratch.json 2>/dev/null` — add `-X POST -H 'Content-Type: application/json' -d '{}'` when `<action>` is write-shaped.
 
-- `AUTH_GATED_API: <path> (auth=Bearer|JWT)` → token-based auth → [[Session Cookie Attacks]] (JWT branch).
-- `AUTH_GATED_API: <path> (auth=OAuth|API-Key|none)` → note the path for credential re-use once creds are recovered downstream.
+###### Route per marker:
 
-##### (f) JSON API detection → route:
+- `SWAP_HIT: <method> <status> <url>` — sibling endpoint exists (ffuf's default matcher excludes `404`, so every line here is a live response). `<method>` is the pass that surfaced it: `POST` ⇒ a write route — carry POST downstream when probing it. Strip the URL to a path → `echo '<path>' >> unauth_api_paths_<host>.txt`.
+- `SWAP_SWEEP_COMPLETE` with no `SWAP_HIT` lines — every prefix swept, no siblings on this vocabulary → (g).
+- A dynamic stub from (d) (`/api/${id}/update`) — the hole is a **mid-position** segment, which this append-only sweep does not currently express (see `Known coverage gap (accepted)` warning note, directly above). 
 
-`grep -vE '/(swagger|openapi|api-docs|graphql|graphiql|playground)' hits_api_<ip>_<port>.txt | sort -u | while read u; do meta=$(curl -s -o /dev/null -w '%{http_code} %{content_type}' -H 'Accept: application/json' "$u"); code=${meta%% *}; case "$code" in 2*) ;; *) continue;; esac; echo "$meta" | grep -qi json || continue; p=$(echo "$u" | sed -E "s|^https?://<host>(:<port>)?||"); ids=$(curl -s -H 'Accept: application/json' "$u" | grep -oiE '"[a-z_]*(id|uuid|guid)"[[:space:]]*:[[:space:]]*"?[0-9a-fA-F-]+"?' | head -3 | tr '\n' ' '); echo "JSON_API: $p${ids:+ | ids: $ids}"; done`
+##### (g) Endpoint classifiers — route what (a)–(f) discovered
 
-Route per marker:
+###### Dedup the API surface, then probe each endpoint once into a 4-field table — `status|content_type|redirect_url|path`:
 
-- `JSON_API: <path>` → live JSON endpoint. Fuzz its query/body parameters → [[Injection]]; enumerate accepted methods (`curl -s -i -X OPTIONS "http://<host>:<port><path>" | grep -i '^allow:'`) and exercise any write method returned (POST/PUT/PATCH/DELETE).
-- `JSON_API: <path> | ids: ...` → sequential-integer or UUID identifiers in the body → [[IDOR]] (increment integers; enumerate/swap UUIDs), and test path-segment IDs directly: `/…/<n>` → `/…/<n±1>`.
+`sort -u unauth_api_paths_$host.txt -o unauth_api_paths_$host.txt; while read -r apath; do printf '%s|%s\n' "$(curl -s -o /dev/null -w '%{http_code}|%{content_type}|%{redirect_url}' --max-time 5 "http://$host:$port${apath}")" "$apath"; done < unauth_api_paths_$host.txt > api_status_$host.txt; printf 'API_PATHS_PROBED: %s\n' "$(wc -l < api_status_$host.txt)"`
+###### Run all three commands below, then route — the Route-per-marker table at the end covers every marker they emit.
 
----
+Classify:
+
+`awk -F'|' '$1 ~ /^(401|403)$/ || ($1 ~ /^3[0-9][0-9]$/ && $3 ~ /(login|signin|auth|sso)/) {print "AUTH_GATED_API: " $4 " (status=" $1 ")"; next} $1 ~ /^2[0-9][0-9]$/ && $2 ~ /json/ && $4 !~ /\/(swagger|openapi|api-docs|graphql|graphiql|playground)/ {print "JSON_API: " $4; next} $1 ~ /^5[0-9][0-9]$/ {print "API_SERVER_ERROR: " $4 " (status=" $1 ")"}' api_status_$host.txt; echo "API_CLASSIFY_COMPLETE"`
+
+Write-only probe — GET-rejecting paths may still accept a write method:
+
+`awk -F'|' '$1 ~ /^(404|405)$/ {print $4}' api_status_$host.txt | while read -r apath; do pcode=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 -X POST -H 'Content-Type: application/json' -d '{}' "http://$host:$port${apath}"); [ "$pcode" = "404" ] && continue; echo "WRITE_ONLY_API: $apath (POST=$pcode)"; done; echo "WRITE_PROBE_COMPLETE"`
+
+Identifier scan on live JSON endpoints:
+
+`awk -F'|' '$1 ~ /^2[0-9][0-9]$/ && $2 ~ /json/ && $4 !~ /\/(swagger|openapi|api-docs|graphql|graphiql|playground)/ {print $4}' api_status_$host.txt | while read -r apath; do ids=$(curl -s --max-time 5 -H 'Accept: application/json' "http://$host:$port${apath}" | grep -oiE '"[a-z_]*(id|uuid|guid)"[[:space:]]*:[[:space:]]*"?[0-9a-fA-F-]+"?' | head -3 | tr '\n' ' '); [ -z "$ids" ] && continue; echo "API_IDS: $apath | $ids"; done; echo "ID_SCAN_COMPLETE"`
+
+###### Route per marker:
+
+- `AUTH_GATED_API: <path> (status=<code>)` — read the challenge: `curl -s -D - -o /dev/null "http://$host:$port<path>" | grep -iE '^(www-authenticate|location|set-cookie):' || echo "NO_CHALLENGE_HEADER"`
+    - `Location:` matching `login|signin|auth|sso` → strip to a path → `echo '<location_path>' >> unauth_api_paths_<host>.txt`
+    - `WWW-Authenticate: Basic` → [[Login Bypass Techniques]] "HTTP Basic Auth" section
+    - `WWW-Authenticate: Bearer` → [[Session Cookie Attacks]] (JWT branch)
+    - `WWW-Authenticate:` any other scheme → `echo 'RESTRICTED: <path> (scheme=<scheme>)' >> route_<ip>.txt`
+    - `Set-Cookie:` present, no `WWW-Authenticate` → [[Session Cookie Attacks]]
+    - `NO_CHALLENGE_HEADER` → `echo 'RESTRICTED: <path>' >> route_<ip>.txt`; re-attempt once creds are recovered downstream
+- `JSON_API: <path>` — live JSON endpoint.
+    - Auth-wall check: `curl -s --max-time 5 "http://<host>:<port><path>" | grep -qiE '"(error|message|detail|status)"[[:space:]]*:[[:space:]]*"[^"]*(unauthor|forbidden|denied|not authenticated|invalid token)' && echo "SOFT_AUTH_GATE" || echo "NOT SOFT_AUTH_GATE"`. `SOFT_AUTH_GATE` → route as `AUTH_GATED_API` above; stop here for this path.
+    - Save the body: `mkdir -p apibodies_${host}_$port; curl -s --max-time 5 -H 'Accept: application/json' "http://$host:$port<path>" -o "apibodies_${host}_$port/$(echo '<path>' | tr '/' '_').json"`
+    - Methods: `curl -s -D - -o /dev/null -X OPTIONS "http://<host>:<port><path>" | grep -iE '^(allow|access-control-allow-methods):' || echo "NO_ALLOW_HEADER"`. Any write method listed → probe it per the `WRITE_ONLY_API` branches above.
+      **Then, once every `JSON_API` path is saved, as a single run before the merge:**
+    - Inspect all saved bodies: `~/scripts/local_file_inspector.py apibodies_<host>_<port>` → route per marker as 7.1(d).
+    - Usernames: `grep -ohiE '"(user|username|login|email|mail|account|owner|handle)"[[:space:]]*:[[:space:]]*"[^"]+"' apibodies_<host>_<port>/*.json | sed 's/.*:[[:space:]]*"//; s/"$//' | sort -u | tee -a users_<host>.txt | grep -q . && echo "API_USERS_HARVESTED" || echo "NO_API_USERS"`
+- `API_IDS: <path> | <ids>` — identifiers in a live response body → [[IDOR]].
+    - Dangling dynamic stubs: `grep -nE '(\$\{[a-zA-Z_]+\}|/:[a-zA-Z_]+|/\{[a-zA-Z_]+\})' unauth_api_paths_<host>.txt || echo "NO_DYNAMIC_STUBS"`. Per stub, substitute one `<ids>` value into the hole and probe: `curl -s -o /dev/null -w '%{http_code}\n' "http://<host>:<port><filled_stub>"`. Non-404 → `echo '<filled_stub>' >> unauth_api_paths_<host>.txt`
+    - ⚠️ Real engagement: skip any stub matching `(delete|remove|destroy|purge|reset|send|pay|transfer)`; `printf 'DEFERRED: SCOPE_HOLD: <stub>\n' >> route_<ip>.txt`
+- `WRITE_ONLY_API: <path> (POST=<code>)` — write surface.
+    - ⚠️ Real engagement: `<path>` matching `(delete|remove|destroy|purge|reset|send|mail|invite|pay|charge|transfer|exec|run|deploy)` → confirm scope before any further request; `printf 'DEFERRED: SCOPE_HOLD: <path>\n' >> route_<ip>.txt`; stop here for this path.
+    - POST=400 / 422 → name the body fields: `curl -s -X POST -H 'Content-Type: application/json' -d '{}' "http://<host>:<port><path>" -o apierr_<host>.json; jq . apierr_<host>.json 2>/dev/null || head -40 apierr_<host>.json`. Read the field names from the output → route each per 4.2. No field names → `printf 'DEFERRED: JSON_FIELDS_UNKNOWN: <path>\n' >> route_<ip>.txt`
+    - POST=415 → re-probe body formats per [[Request Content-Types by Body Format]]; any non-415 format → re-enter the 400 / 422 branch above
+    - POST=2xx → `printf '[step9-sweep] DEFERRED: STATE_ENDPOINT: <path>\n' >> route_<ip>.txt`
+    - `<path>` matching `(login|signin|token|session|authenticate)` → [[Credential Attacks]], JSON body, field names as above
+    - `<path>` matching `(register|signup)` → [[Registration Attacks]]. Matching `(forgot|reset|recover)` → [[Password Reset Attacks]]
+- `API_SERVER_ERROR: <path> (status=<code>)` — unhandled error.
+    - Self-inflicted check first: `curl -s -o /dev/null -w '%{http_code}\n' "http://<host>:<port>/" | grep -qE '^(200|30[0-9])$' && echo "HOST_LIVE" || echo "NOT HOST_LIVE"`. `NOT HOST_LIVE` → host degraded by the 7.2(e)/(f) sweeps; `printf 'DEFERRED: API_5XX_SCANNER_INDUCED\n' >> route_<ip>.txt`; discard the whole 5xx set.
+    - status=502 / 503 / 504 → upstream, no app body → `printf 'DEFERRED: UPSTREAM_DOWN: <path>\n' >> route_<ip>.txt`
+    - status=500 → read the body: `curl -s "http://<host>:<port><path>" | head -60`
+        - product / version tokens → **Version-discovery route**
+        - SQL text → [[Error-Based SQL Injection]]
+        - absolute filesystem paths → target list for [[Local File Inclusion]] and [[Path Traversal]]
+        - a named missing parameter → `echo '<path>?<param>=1' >> unauth_api_paths_<host>.txt`
+        - none of the above → `printf 'DEFERRED: 500_OPAQUE: <path>\n' >> route_<ip>.txt`
+- `API_PATHS_PROBED: 0` — 7.2 discovered nothing → 7.3.
+
+Merge the API surface into the master path list — run last, before the Step 7 boundary:
+
+`cat unauth_api_paths_$host.txt >> unauth_paths_$host.txt && sort -u unauth_paths_$host.txt -o unauth_paths_$host.txt`
+
+Then → 7.3.
 
 ### 7.3 Archive / backup / dump discovery
 

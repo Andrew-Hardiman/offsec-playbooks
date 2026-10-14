@@ -1,7 +1,7 @@
 
 
 **Type:** Design Notes (deferred-build design capture). Not a playbook — no STATUS tier.
-**Owns:** the reasoning behind the ⚠️ tripwire in [[Web Attack Checksheet]] `6.2 API endpoint enumeration`.
+**Owns:** the derivation behind [[Web Attack Checksheet]] 7.2, and the closed tripwire that preceded it.
 **Surfaced:** 2026-09-22, THM "Modern Web Stacks" (MERN box) — walk of WAC 6.2 against a Next.js/Express app on :3000.
 
 ---
@@ -49,6 +49,8 @@ For `/api/user/update`:
 
 ## What *does* reach multi-segment paths — positional (combinatorial) fuzz
 
+> **PRESCRIPTION SUPERSEDED 2026-10-12** — the mechanics here are correct and are retained as 7.2(f) segment-swap (single fuzz position, off an already-discovered endpoint). Multi-position clusterbomb as the *primary* discovery sweep is dropped; 7.2(e) runs a curated full-path list instead — observed-route corpora were examined and ruled out. See *Session addendum — 2026-10-12*.
+
 Put a fuzz point in **every** path position and request the combinations directly:
 
 `ffuf -u "http://<host>:<port>/api/FUZZONE/FUZZTWO" -w <list>:FUZZONE -w <list>:FUZZTWO -mode clusterbomb -mc 200`
@@ -83,11 +85,13 @@ A path the wordlist can't reach has to be learned from a source other than blind
 
 **Principle:** paths outside the wordlist come from the app disclosing them, or from inferring off a known endpoint. Blind brute is the backstop, not the primary method.
 
-**Current playbook gap this exposes:** WAC has no first-class step to *harvest* endpoints from what the app discloses — the client's shipped code and observed traffic (for a web target, predominantly the JS/HTML it ships). 6.1 `(e)` greps only source-shape files feroxbuster happens to surface, and feroxbuster's link-extraction scans them but is unreliable (misses dynamically-built routes like `` fetch(`/api/${x}/update`) ``, and on the box that surfaced this returned only root).
+**Playbook gap this exposed — CLOSED 2026-10-12 by 7.2(d).** At the time of writing, WAC had no first-class step to *harvest* endpoints from what the app discloses — the client's shipped code and observed traffic (for a web target, predominantly the JS/HTML it ships). 6.1 `(e)` greped only source-shape files feroxbuster happened to surface, and feroxbuster's link-extraction scans them but is unreliable (misses dynamically-built routes like `` fetch(`/api/${x}/update`) ``, and on the box that surfaced this returned only root). 7.2(d) client-code harvest now owns this.
 
 ---
 
 ## Decision — deferred, with tripwire
+
+> **SUPERSEDED 2026-10-12** — the tripwire fired twice and is now **CLOSED (actioned)**. The deferral decision and the prescribed fix below are historical. Live spec: [[Web Attack Checksheet]] 7.2. See *Session addendum — 2026-10-12*.
 
 **Do NOT build now.** Rationale (career-strategy-aligned; OSCP+ is the immediate gate):
 - **Fire rate is near-zero on the OSCP+ exam** — classic web (SQLi, LFI/RFI, upload, auth bypass, known-CVE) dominates; deep custom sparse-routed API endpoints are atypical of the exam.
@@ -110,7 +114,7 @@ A path the wordlist can't reach has to be learned from a source other than blind
 
 - feroxbuster — Kali man page (`--status-codes` default: All Status Codes; `-m/--methods` default GET; `-d/--depth` default 4): https://www.kali.org/tools/feroxbuster/
 - feroxbuster recursion / forced-recursion rules: https://epi052.github.io/feroxbuster-docs/ (Forced Recursion), https://github.com/epi052/feroxbuster
-- SecLists `Discovery/Web-Content/api/` README (`objects.txt` = nouns, `actions.txt` = verbs; `api-endpoints.txt` = 371 curated full paths incl. spec/doc/graphql): https://github.com/danielmiessler/SecLists/tree/master/Discovery/Web-Content/api
+- SecLists `Discovery/Web-Content/api/` — full directory composition confirmed on Kali 2026-10-12; see *Session addendum — 2026-10-12* → *SecLists `api/` composition*: https://github.com/danielmiessler/SecLists/tree/master/Discovery/Web-Content/api
 - API-discovery method reference: OWASP WSTG API Reconnaissance; https://zerodayhacker.com/discover-api-endpoints-with-feroxbuster/
 - Sandbox-verified this session: recursion-ladder failure (parents 404 → recursion assembles nothing); positional-fuzz success (same wordlist, clusterbomb reaches the leaf); status/content-type classification.
 
@@ -121,6 +125,8 @@ A path the wordlist can't reach has to be learned from a source other than blind
 **Additive only** — everything above is unchanged. This records the second tripwire occurrence that triggers the build, plus design points raised while scoping it that the original derivation does not cover. Where a point sharpens an existing section, it names that section rather than restating it.
 
 ### Status: the build is now triggered
+
+> **CLOSED 2026-10-12** — built. See *Session addendum — 2026-10-12*.
 
 Second occurrence (the tripwire's "do not ignore a second time"): THM **Web Server Attacks - I**, the API app on **:8000**. Brute (7.2) returned only `/`; the room's own writeup shows `/api/users`, `/api/routes`, `/api/debug/env` exist — exactly the blind spot in _Why blind brute misses the endpoints_. → Build the fix.
 
@@ -153,6 +159,8 @@ The "grep client code → endpoints" extraction half of harvest (the `katana`/`L
 
 ### Positional-fuzz — the curated per-position lists (completes the body's "small targeted lists per position")
 
+> **SUPERSEDED 2026-10-12** — the per-position lists and per-depth clusterbomb templates were not built, and neither was a curated vocabulary file. 7.2(f) builds its segment vocabulary at runtime from distro-packaged SecLists instead. See *Session addendum — 2026-10-12*.
+
 The body establishes the principle — positional fuzz is practical only with "known prefix, known depth, small targeted lists per position" — but leaves the lists as generic `objects.txt × actions.txt`, which it also flags as exploding (thousands of nouns × hundreds of verbs). The completion: **each position gets its own small, curated, API-meaningful set**, not a generic SecLists dump. This keeps depth-3+ feasible (small lists bound W^N) _and_ high-signal (real API vocabulary, not dictionary words):
 
 - **Prefix / structural position** — usually _pinned_ from discovered structure rather than fuzzed: `api`, `v1`, `v2`, `v3`, `rest`, `graphql`, `internal`, `admin`.
@@ -161,6 +169,61 @@ The body establishes the principle — positional fuzz is practical only with "k
 
 Mechanics (extends the body): pin the prefix from discovered structure; provide a template **per depth** — **depth 2 (`/<prefix>/FUZZ`) and depth 3 (`/<prefix>/FUZZ/FUZZ`) at least** (explicit operator requirement — real APIs nest past two segments), extensible to depth 4 — each its own `ffuf` clusterbomb invocation, feeding the matching curated list into each position (resource-vocab into noun positions, verb-vocab into action positions) and the request-shape headers/method above. Build-time: derive/trim these lists against the SecLists `Discovery/Web-Content/api/` wordlists, keeping each small enough that depth-3 stays feasible and quiet.
 
-### Minor: dynamic-route stubs as fuzz seeds
+### Minor: dynamic-route stubs as segment-swap templates (written as "fuzz seeds")
 
 The inspector emits template-literal routes as static stubs (`/api/${id}/update`). Route these as **positional-fuzz seeds** (known prefix + known trailing segment), not literal `unauth_paths` probes. Low-yield; noted for completeness.
+
+## Session addendum — 2026-10-12 (build actioned → tripwire closed; prescription superseded)
+
+**The finding and the feroxbuster mechanics above are unchanged and remain correct.** What is superseded is the **prescribed fix** — the two-sub-block "endpoint-harvest + ffuf positional-fuzz" design, and the per-position curated-list / per-depth-clusterbomb mechanics in the 2026-10-06 addendum. Those were derived from "what tools do I already have", not from "what does the field actually do". Re-derived this session against primary sources; the answer differs.
+
+### Tripwire: CLOSED
+
+Fired twice (2026-09-22 MERN box :3000; 2026-10-06 THM _Web Server Attacks - I_ :8000). Actioned 2026-10-12. The build is the rewritten [[Web Attack Checksheet]] **7.2**, which is now the live spec. This note is historical derivation from here on — it no longer prescribes a build.
+
+### What the re-derivation changed
+
+**1. Observed-route corpora beat cartesian products.** The body's rejection of "materialise the combinatorial wordlist to a file" is still correct _as written_ — a W^N product on disk is strictly worse than generating it in ffuf. But it left a third option unexamined: a wordlist of **complete observed routes**, mined from real-world API specs, is not a materialised cartesian product. It is a different artefact. It carries only paths that real APIs actually serve, so it is small, dense, and has no depth ceiling and no prefix assumption — the exact three limits the body lists against positional fuzz. Entries are full paths, so recursion is disabled (`-d 1`) and the non-404-parent problem never arises. This is what the field uses; a self-generated cartesian product is not.
+
+**But no usable corpus exists at a feasible size, so 7.2(e) does not use one.** Both candidates failed on inspection: Assetnote's `swagger-wordlist.txt` is 958,872 entries — the same order as the `httparchive_apiroutes` list rejected on size minutes earlier, so ~1.9M requests at `-m GET,POST`, not exam-viable; and SecLists `api-seen-in-wild.txt` (7,615) holds API **function names**, not routes — its first entries are `!`, `!=`, `&&`, `=`, `==`. 7.2(e) therefore runs SecLists `api-endpoints.txt`: 269 curated full paths, distro-packaged, zero custody. **Do not reach for a corpus again without reading its first lines** — both failures came from inferring content from a filename.
+
+**2. Multi-position clusterbomb is a multiplier, not a sweep.** Retained in 7.2(f) as a **single-position segment swap** off an already-discovered endpoint — which is the body's own "you infer it off an already-discovered endpoint" mechanism, and the only form in which wildcard calibration is well-defined. Multi-position clusterbomb as the primary discovery sweep is dropped.
+
+**3. Vector order corrected — brute is last.** OWASP WSTG `12-API_Testing/01-API_Reconnaissance` and PortSwigger _API testing_ both sequence discovery as: spec/docs → passive → observed traffic → client-side code → **active brute last**. The 2026-10-06 addendum had harvest running _late_ (after the 7.1 brute) on a data-flow argument. That argument was about harvest's _inputs_ being maximal; it does not justify running the low-yield blind sweep first. 7.2 now runs: (a) spec/docs → (b) route-dumper → (c) GraphQL → (d) client-code harvest → (e) curated-route brute → (f) segment-swap → (g) classifiers.
+
+**4. kiterunner exists, and it has the mechanism this design lacked.** `kr` — replays **complete spec-derived requests** (method + path + headers + body) from a corpus compiled from internet-scanned Swagger paths, GitHub, and APIs.guru; baselines the not-found response **per host at a configurable directory depth**, and quarantines a host whose routing is wildcard. Depth-aware per-host baselining + wildcard quarantine is the missing piece — every design in this note before today baselined not-found globally or not at all. Exam-legal and unlimited. **Not used.** Briefly carried in 7.2(e) as a flagged overlay, then dropped: owning its corpus does not fix the chain, because `kr` itself is unpackaged, lightly maintained and flag-unverified — one owned link in a three-link dependency. The mechanism it demonstrates is the value recorded here; the tool is not.
+
+**Source honesty:** only OWASP WSTG names kiterunner. PortSwigger does **not** mention it and teaches Burp Intruder segment-swapping instead. One authoritative source, not two converging — recorded because an earlier draft of this reasoning overstated it.
+
+**5. Still standing from 2026-10-06:** _request-shape is a second, compounding axis_ — unchanged and honoured (7.2(e) runs `-m GET,POST`; every probe in (a)–(c) sets `Accept: application/json` or a JSON body; (f) re-runs with the POST shape). _Yield ordering_ — unchanged in rank 1 (one-hit-full-surface) and rank 2 (client-code harvest); rank 3 is now the curated-route brute, with segment-swap as the multiplier and stray-file harvest the backstop. _Dynamic-route stubs_ — unchanged in substance; terminology is now **template** not **seed** (a seed is what you plant into the hole, so the hole-bearing path is the template). The retained per-position vocabulary was **not** built as a file — 7.2(f) builds its segment list at runtime from SecLists `objects.txt` (alphabetic-leading kept in both cases, pure-numeric stripped — numeric segments belong to [[IDOR]]) ∪ `actions.txt`, plus `flag`, `routes`, `route`, the three tokens SecLists lacks.
+
+### SecLists `api/` composition — confirmed on Kali 2026-10-12
+
+Settles both wordlist choices. The directory is the upstream `chrislockard/api_wordlist` repo plus SecLists additions; its README states the intent is **Burp Intruder cluster-bomb** (payload set 1 = `actions.txt`, set 2 = `objects.txt`), so most files are single tokens by design, not paths.
+
+- `api-endpoints.txt` — **269 full paths**, no leading slash (`api/ads`, `api/announcements`). Absent from the README; a SecLists addition, and the only general-purpose path-shaped list in the directory. → 7.2(e).
+- `objects.txt` (3,132) — nouns, but carries a numeric block (`0`, `00`, `01`, …) plus Capitalised variants. → 7.2(f), filtered to alphabetic-leading. PascalCase compounds (`UserAccount`) are **kept**: ASP.NET routes are commonly PascalCase and paths are case-sensitive.
+- `actions.txt` (224) — verbs, lowercase and Capitalised interleaved (112 + 112). → 7.2(f).
+- `api-seen-in-wild.txt` (7,615) — function **names**, not routes. Unusable as a path list.
+- `api-endpoints-res.txt` (12,334) — README: "combination of all of the files above". Single words.
+- `actions-lowercase`/`-uppercase`, `objects-lowercase`/`-uppercase` — small case-variant subsets.
+- `ispsystem_billmanager_api.txt` (988), `salesforce-aura-objects.txt` (1,285) — vendor-scoped, format unexamined; irrelevant to a general backstop whatever their format.
+
+`flag`, `routes` and `route` are absent from both `objects.txt` and `actions.txt` — hence the three inline supplements in 7.2(f)'s build command. `flag` is the token that reaches `/api/admin/flag`, this note's own worked example.
+
+### What was built and discarded
+
+`api_positional_fuzz.py` — ~700 lines, typed, injectable runner, 60 tests, `mypy --strict` clean, every ffuf flag Kali-confirmed. Generated prefix-jobs and curated-set clusterbomb jobs across depths 2–3, plus stub templates. **Discarded for the 7.2 brute role** — it generates cartesian products (point 1) and has no depth-aware baselining (point 4).
+
+First live run against a THM box emitted **237,386 `API_ENDPOINT_FOUND` lines, all 404**. The sandbox tests had not caught it because the mock's 404 was constant-size. The on-box root cause was **deliberately not established** — diagnosing it would have meant reading that box's not-found shape and tuning to it, and a tool tuned against the box that tests it is not built from first principles. The research instead supplies the likely mechanism: no per-host, depth-aware not-found baseline, so the not-found wall was never characterised and `-fc 404` is a patch on a mis-diagnosed cause.
+
+Kept on disk, not in the vault, as the starting point for the deferred own-tool project.
+
+### Deferred — own kiterunner-class tool (post-OSCP)
+
+Build a maintained observed-route scanner with depth-aware per-host baselining and wildcard quarantine. Rationale: kiterunner is stale, the corpus is the moat, and the mechanism is now understood. **Not now** — zero OSCP+ advancement, and it is a public-artefact / differentiator project, not an exam one. No tripwire; this is a scheduled career item, not a reactive one.
+
+### Discipline lessons (two, both generalisations of existing V_S rules)
+
+- **Ask "what does a world-class operator do" against primary sources _before_ designing, not after a design fails.** The whole positional-fuzz design was a correct derivation inside an under-searched solution space. The body's own _Evidence / sources_ section cites OWASP WSTG API Reconnaissance — and the design still did not follow its ordering. Citing a source is not reading it.
+- **A passing test suite over a self-written mock proves the procedure runs; it does not prove the procedure is right.** V_S already holds this. This is its second instance, and the most expensive: 60 green tests over a mock with a constant-size 404, against a 237k-line false-positive flood on first contact. When the mock models the adversarial surface, model its _variability_, not one instance of it.
