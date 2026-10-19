@@ -1,9 +1,9 @@
 
-> **STATUS: FORMAT-ONLY** — three-set structural restructure applied 2026-09-19; Step 7 (Active content discovery) fully first-principles + primary-source audited (7.1 2026-09-19 / reworked 2026-10-14, 7.2 re-derived 2026-10-12); remaining sub-blocks structurally reshaped from pre-audit state, per-sub-block first-principles derivation INCOMPLETE. Live-validation pending. Not CANONICAL.
+> **STATUS: FORMAT-ONLY** — three-set structural restructure applied 2026-09-19; Step 8 (Active content discovery) fully first-principles + primary-source audited (8.1 2026-09-19 / reworked 2026-10-14, 8.2 re-derived 2026-10-12); remaining sub-blocks structurally reshaped from pre-audit state, per-sub-block first-principles derivation INCOMPLETE. Live-validation pending. Not CANONICAL.
 
 Routes HTTP/HTTPS service to web attack technique walkthroughs. Pure router — attack content lives in per-technique files.
 
-Ordering: P(yield)/time-cost, OSCP+-tuned. Surface enumeration first (Step 1); root-only fingerprinting (Step 2); passive per-path recon (Step 3); input-surface enumeration + injection routing (Step 4); auth-form processing (Step 5); well-known files (Step 6); active scanning (Step 7); subdomain enum only if domain-based (Step 8); deferred low-EV last (Step 9). Off-target OSINT footer-only — near-zero P(yield) on lab boxes.
+Ordering: P(yield)/time-cost, OSCP+-tuned. Surface enumeration first; root-only fingerprinting; passive per-path recon; server capability probing; input-surface enumeration + injection routing; auth-form processing; well-known files; active scanning; subdomain enum only if domain-based; deferred low-EV last. Off-target OSINT footer-only — near-zero P(yield) on lab boxes.
 
 ---
 
@@ -11,7 +11,7 @@ Ordering: P(yield)/time-cost, OSCP+-tuned. Surface enumeration first (Step 1); r
 
 Per HTTP/HTTPS service on target (multiple ports = multiple walks).
 
-`<host>` = target hostname or IP for the HTTP service. `<port>` = the HTTP/HTTPS port. `<ip>` = target IP (matches existing MW `route_<ip>.txt`). `<domain>` = target's DNS-resolvable domain (Step 8 only; skip Step 8 if target is IP-only).
+`<host>` = target hostname or IP for the HTTP service. `<port>` = the HTTP/HTTPS port. `<ip>` = target IP (matches existing MW `route_<ip>.txt`). `<domain>` = target's DNS-resolvable domain (Step 9 only; skip Step 9 if target is IP-only).
 
 Initialise decision log — append to existing `route_<ip>.txt`:
 
@@ -93,11 +93,12 @@ Runs when `creds_<host>.txt` has entries not present in `creds_<host>.txt.walked
 
 `comm -23 <(sort -u creds_<host>.txt) <(sort -u creds_<host>.txt.walked 2>/dev/null)`
 
-Action:
+Actions (both fire per new cred):
 
-- [[Authenticated Walk]]
+1. Deferred write retry requiring authentication. `grep 'WRITE_.*_NEEDS_AUTH' route_<ip>.txt` → for each `<dir>`, retry [[#Step 4 — Server capability probing]] authenticated. Retry must branch on `WWW-Authenticate` scheme: Basic → `-u`, NTLM → `--ntlm -u`, cookie-based → `-b`. 
+2. [[Authenticated Walk]]
 
-Mark **all** newly-walked entries after Auth Walk returns:
+Mark **all** newly-walked entries:
 
 `echo '<entry>' >> creds_<host>.txt.walked`
 
@@ -110,11 +111,11 @@ Runs when `unauth_paths_<host>.txt` has entries not present in `unauth_paths_<ho
 For each unwalked path `<p>`:
 
 1. Apply Passive Recon set actions (Step 3 — each with its scope filter; skip actions whose filter excludes `<p>`).
-2. Input Surface Enumeration (Step 4) — run both scripts against `<p>`, then route per 4.2 / defer per 4.3.
+2. Input Surface Enumeration (Step 5) — run both scripts against `<p>`, then route per 5.2 / defer per 5.3.
 3. If `<p>` matches auth-shape filter → additionally dispatch Auth-form Per-path processing:
-   - Matches `(login|signin|portal)` → 5.1 Per-path processing
-   - Matches `(register|signup)` → 5.2 Per-path processing
-   - Matches `(forgot|reset|recover)` → 5.3 Per-path processing
+   - Matches `(login|signin|portal)` → 6.1 Per-path processing
+   - Matches `(register|signup)` → 6.2 Per-path processing
+   - Matches `(forgot|reset|recover)` → 6.3 Per-path processing
 
 Mark path walked after all applicable actions run:
 
@@ -143,7 +144,7 @@ Route:
 - `unauth_paths_<host>.txt` non-empty → seed walked file (below), continue to Step 2.
 - `unauth_paths_<host>.txt` empty → seed with root only: `echo '/' > unauth_paths_<host>.txt`. Seed walked file (below), continue to Step 2.
 
-Seed walked file — marks all Step-1-discovered paths as already-covered by Passive Recon (Step 3) initial iteration; end-of-Step-5-onward re-fires drain only paths discovered post-Step-1:
+Seed walked file — marks all Step-1-discovered paths as already-covered by Passive Recon (Step 3) initial iteration; end-of-Step-6-onward re-fires drain only paths discovered post-Step-1:
 
 `cp unauth_paths_$host.txt unauth_paths_$host.txt.walked`
 
@@ -155,7 +156,7 @@ Homepage-only sub-blocks; scope is `/` (or `/favicon.ico` for 2.2). These signal
 
 ### 2.1 Server identity — headers and error page
 
-Run both, before routing. The two emission points **can** disagree; a disagreement is a second component, not a duplicate.
+**Run both, before routing.** The two emission points **can** disagree; a disagreement is a second component, not a duplicate.
 
 ##### Headers (root):
 
@@ -283,11 +284,65 @@ Route per path on output:
 - Flag hit → capture value; enter into room's answer field if THM/HTB task; log to `route_<ip>.txt` as `FLAG_FOUND: <path>: <value>`
 - `NO_FLAG` → no action for this path
 
-## Step 4 — Input Surface Enumeration
+---
+
+## Step 4 — Server capability probing
+
+> **STATUS: FORMAT-ONLY** — derived 2026-10-17 from the IIS WebDAV chain (THM `Web Server Attacks - II`) + File Upload §5; not first-principles audited, no live run. MOVE/PUT chain mechanics corrected but unverified on a real target. Not CANONICAL.
+
+Per-directory HTTP method enumeration. A writable verb is an input surface the app exposes no form for — WebDAV `PUT`, or `PUT`+`MOVE` past an upload filter — and a direct foothold when the directory is also script-executable.
+
+`Allow:` is returned per-URL but WebDAV is configured per-directory. Probe every discovered path as-is plus all ancestor directories — a path with no trailing slash may itself be a WebDAV collection (`/admin/upload`), so ancestors-only would miss it; dedup collapses the redundant file-level probes.
+
+### 4.1 Build the probe set
+
+`{ awk -F/ '{p="/"; print p; for(i=2;i<NF;i++){p=p $i "/"; print p}} {print}' unauth_paths_$host.txt; printf '/\n/uploads/\n/files/\n/media/\n/attachments/\n/images/\n/static/\n/storage/\n/webdav/\n/dav/\n'; } | sort -u > method_dirs_$host.txt; printf 'METHOD_DIRS: %s\n' "$(wc -l < method_dirs_$host.txt)"`
+
+Every discovered path contributes `/`, its ancestor directories, and itself; plus the conventional directory list; deduped.
+
+### 4.2 Sweep
+
+`while read -r d; do hdrs=$(curl -s -D - -o /dev/null -X OPTIONS --max-time 5 "http://$host:$port$d" | tr -d '\r'); allow=$(printf '%s\n' "$hdrs" | grep -i '^allow:' | cut -d: -f2- | tr -d ' '); dav=$(printf '%s\n' "$hdrs" | grep -i '^dav:' | cut -d: -f2- | tr -d ' '); [ -n "$dav" ] && dav="DAV: $dav"; printf '%s|%s|%s\n' "$d" "${allow:-NONE}" "${dav:-NONE}"; done < method_dirs_$host.txt > methods_$host.txt; printf 'METHODS_PROBED: %s\n' "$(wc -l < methods_$host.txt)"`
+
+Output table is `dir|allow|dav`.
+
+### 4.3 Process the methods table:
+
+###### `grep` for `PUT`, `MKCOL` and `DAV` (write candidates)
+
+`grep -E 'PUT|MKCOL|DAV' methods_$host.txt > method_write_candidates.txt`
+###### Confirm `PUT` capability:
+
+For each dir advertising `PUT` (`cat method_write_candidates.txt | grep "PUT"`) confirm capability: 
+
+`curl -s -D - -o /dev/null -w '%{http_code}\n' -X PUT --data test "http://$host:$port<dir>/wac.txt"`
+
+- `401` → writable with auth. Record in `route_<ip>.txt` → `DEFERRED: WRITE_PUT_NEEDS_AUTH: <dir> | WWW-Authenticate: <auth_method>`
+- `201`/`200` → writable. GET it back to confirm (`curl -s "http://$host:$port<dir>/wac.txt"`), then → [[File Upload]] `Write via HTTP method`, `<put_dir>` = `<dir>`.
+- else → denied.
+
+⚠️ Writes a file to the target. Real engagement: scope first; `curl -X DELETE` to clean up.
+
+###### Confirm `MKCOL` capability:
+ 
+For each dir advertising `MKCOL` (`cat method_write_candidates.txt | grep "MKCOL"`) confirm capability: 
+
+`curl -s -D - -o /dev/null -w '%{http_code}\n' -X MKCOL "http://$host:$port<dir>/wac_TEST/"`
+
+- `401` → writable with auth. Record in `route_<ip>.txt` → `DEFERRED: WRITE_MKCOL_NEEDS_AUTH: <dir> | WWW-Authenticate: <auth_method>`
+- `201`/`200` → directory created. PUT into it to confirm file write:
+    `curl -s -o /dev/null -w '%{http_code}\n' -X PUT --data TEST "http://$host:$port<dir>/wac_TEST/wac.txt"`. GET it back to confirm (`curl -s "http://$host:$port<dir>/wac_TEST/wac.txt"`), then → [[File Upload]] `Write via HTTP method`, `<put_dir>` = `<dir>`
+- else → denied.
+
+⚠️ Writes a file to the target. Real engagement: scope first; `curl -X DELETE` to clean up.
+
+---
+
+## Step 5 — Input Surface Enumeration
 
 Enumerate every input the app exposes — URL query parameters and HTML form controls — across all discovered paths, then route each to its highest-EV technique. Two scripts surface the two input containers (URL query strings; form fields including hidden inputs, POST bodies, textareas); one routing table consumes both.
 
-### 4.1 Enumerate inputs
+### 5.1 Enumerate inputs
 
 Batch both scripts over the master path list:
 
@@ -297,7 +352,7 @@ Batch both scripts over the master path list:
 
 ⚠️ **JS-tripwire:** `form_enum.py` flags pages whose forms may be JS-built (they won't appear in its output). If a form visible in the browser is missing from the output, capture it from HAR/Burp and route it manually.
 
-### 4.2 Route candidates (highest-EV first)
+### 5.2 Route candidates (highest-EV first)
 
 Collect all `ROUTE_CANDIDATE` / `UPLOAD_CANDIDATE` lines from both scripts. Route each by param name, then by value shape (URL params carry `[url/<shape>]`; form fields route by name / control type). 
 
@@ -318,19 +373,19 @@ Name/shape is a priority hint, not proof — a param confirmed user-controllable
 
 No candidates emitted for a path → no action for that path.
 
-### 4.3 Defer reflected / stored / state surfaces (Step 9 sweep)
+### 5.3 Defer reflected / stored / state surfaces (deferred sweep)
 
-Client-side and state-abuse surfaces are lower-EV for foothold — logged now, walked in the Step 9 sweep, not here. Seed from script output (text / textarea / search controls) plus browse. For each, log DEFERRED — do NOT walk the technique now:
+Client-side and state-abuse surfaces are lower-EV for foothold — logged now, walked in the Step 10 deferred sweep, not here. Seed from script output (text / textarea / search controls) plus browse. For each, log DEFERRED — do NOT walk the technique now:
 
-- Search / filter / error / page param that echoes into the response → `printf '[step9-sweep] DEFERRED: REFLECTED_CANDIDATE: <location>\n' >> route_<ip>.txt`
-- Textarea / comment / review / bio / message field (content persists) → `printf '[step9-sweep] DEFERRED: STORED_SURFACE: <location>\n' >> route_<ip>.txt`
-- State-mutating submit (register, redeem, transfer, one-time claim) → `printf '[step9-sweep] DEFERRED: STATE_ENDPOINT: <location>\n' >> route_<ip>.txt`
+- Search / filter / error / page param that echoes into the response → `printf '[deferred sweep] DEFERRED: REFLECTED_CANDIDATE: <location>\n' >> route_<ip>.txt`
+- Textarea / comment / review / bio / message field (content persists) → `printf '[deferred sweep] DEFERRED: STORED_SURFACE: <location>\n' >> route_<ip>.txt`
+- State-mutating submit (register, redeem, transfer, one-time claim) → `printf '[deferred sweep] DEFERRED: STATE_ENDPOINT: <location>\n' >> route_<ip>.txt`
 
 Nothing observed for a path → no action.
 
-## Step 5 — Auth-form processing
+## Step 6 — Auth-form processing
 
-### 5.1 Login form
+### 6.1 Login form
 
 Discover login form via:
 
@@ -384,7 +439,7 @@ Route on markers:
 - Other markers (`RESTRICTED` / `METHOD_MISMATCH` / `SERVER_ERROR` / `NO_FORM` / `DEAD` / `UNREACHABLE`) → informational, no action in this sub-block
 - No `LOGIN_FORM_FOUND` AND no `LOGIN_CANDIDATE` AND no actionable `AUTH_CHALLENGE` → continue
 
-### 5.2 Register form
+### 6.2 Register form
 
 Discover register / sign-up form via:
 
@@ -435,7 +490,7 @@ Route on markers:
 - Other markers (`AUTH_CHALLENGE` / `RESTRICTED` / `METHOD_MISMATCH` / `SERVER_ERROR` / `NO_FORM` / `DEAD` / `UNREACHABLE`) → informational, no action in this sub-block
 - No `REGISTER_FORM_FOUND` AND no `REGISTER_CANDIDATE` → Continue
 
-### 5.3 Forgot-password form
+### 6.3 Forgot-password form
 
 Discover forgot-password / reset form via:
 
@@ -484,25 +539,25 @@ Route on markers:
 - No `FORGOT_FORM_FOUND` AND no `FORGOT_CANDIDATE` → Continue
 
 ---
-## — Boundary — end of Step 5
+## — Boundary — end of Step 6
 
 → [[#Accumulator re-fire check]]
-→ Step 6
+→ Step 7
 
 ---
 
-## Step 6 — Well-known files
+## Step 7 — Well-known files
 
-### 6.1 robots.txt
+### 7.1 robots.txt
 
 `curl -s http://$host:$port/robots.txt || echo "ROBOTS_ABSENT"`
 
 Route on output:
 
 - Entries under `Disallow:` → for each, `echo '<path>' >> unauth_paths_<host>.txt` (re-fire drains at Step boundary)
-- `ROBOTS_ABSENT` → 6.2
+- `ROBOTS_ABSENT` → 7.2
 
-### 6.2 sitemap.xml
+### 7.2 sitemap.xml
 
 `{ curl -sfL "http://$host:$port/sitemap.xml" || curl -sfL "http://$host:$port/sitemap_index.xml"; } || echo "SITEMAP_ABSENT"`
 
@@ -511,7 +566,7 @@ Route on output:
 - `<loc>` entries present → for each not already in `unauth_paths_<host>.txt`, extract path (strip scheme+host) → `echo '<path>' >> unauth_paths_<host>.txt`
 - `SITEMAP_ABSENT` → continue
 
-### 6.3 Server diagnostic endpoints
+### 7.3 Server diagnostic endpoints
 
 ⚠️ Stack-gated — run the Apache block on an Apache stack, the nginx block on an nginx stack; stack unknown → run both.
 
@@ -555,20 +610,20 @@ Route per marker:
 
 ---
 
-## — Boundary — end of Step 6
+## — Boundary — end of Step 7
 
 → [[#Accumulator re-fire check]]
-→ Step 7
+→ Step 8
 
 ---
 
-## Step 7 — Active content discovery
+## Step 8 — Active content discovery
 
-> **STATUS (this step): AUDITED** — 7.1 derived 2026-09-19, reworked 2026-10-14; 7.2 re-derived 2026-10-12, (f) reworked 2026-10-13, (g) re-derived 2026-10-14. Primary sources: OWASP WSTG-INFO-04/06 + API Reconnaissance, PortSwigger Content Discovery + API testing, HackTricks, PayloadsAllTheThings, feroxbuster/ffuf/SecLists docs. Mechanics sandbox-verified; tool flags confirmed on Kali 2026-10-12/13/14. (f) live-run on THM `Modern Web Stacks` + `Web Server Attacks - I`; **(g)'s routing is derived but never run**. Live-validation pending. Not CANONICAL.
+> **STATUS (this step): AUDITED** — 8.1 derived 2026-09-19, reworked 2026-10-14; 8.2 re-derived 2026-10-12, (f) reworked 2026-10-13, (g) re-derived 2026-10-14. Primary sources: OWASP WSTG-INFO-04/06 + API Reconnaissance, PortSwigger Content Discovery + API testing, HackTricks, PayloadsAllTheThings, feroxbuster/ffuf/SecLists docs. Mechanics sandbox-verified; tool flags confirmed on Kali 2026-10-12/13/14. (f) live-run on THM `Modern Web Stacks` + `Web Server Attacks - I`; **(g)'s routing is derived but never run**. Live-validation pending. Not CANONICAL.
 
-Actively enumerate paths the app didn't advertise. Two mechanisms: recursive wordlist enumeration (7.1) and API endpoint enumeration (7.2). All hits reach `unauth_paths_<host>.txt` — 7.1 directly, 7.2 via its own API accumulator — and the re-fire at the Step 7 boundary dispatches Passive Recon (Step 3), Input Surface (Step 4) and Auth-form processing (Step 5).
+Actively enumerate paths the app didn't advertise. Two mechanisms: recursive wordlist enumeration (8.1) and API endpoint enumeration (8.2). All hits reach `unauth_paths_<host>.txt` — 8.1 directly, 8.2 via its own API accumulator — and the re-fire at the Step 8 boundary dispatches Passive Recon (Step 3), Input Surface (Step 5) and Auth-form processing (Step 6).
 
-### 7.1 Recursive wordlist enumeration
+### 8.1 Recursive wordlist enumeration
 
 #### **Feroxbuster** 
 
@@ -646,8 +701,8 @@ Route per marker:
 
 - `FILE_CRED: <path>: <match>` — verify (may be a placeholder like `changeme` / `<PASSWORD>`); real credential → `echo '<user>:<pass>' >> creds_<host>.txt`; log `echo 'FILE_CRED: <path>: <match>' >> route_<ip>.txt`.
 - `SECRET: <path>: <type>:<value>` — route by `<type>`: `jwt` → [[Session Cookie Attacks]] (JWT branch); `bearer` / `token` → reuse as an `Authorization` header on auth-gated requests; `aws_akid` / `api_key` / `google_api_key` / `slack_token` / `pem_private_key` / `secret` → note for the matching service, reuse when that service surfaces. Log to `route_<ip>.txt`.
-- `ENDPOINT_REF: <path>: <ref>` — new attack surface → `echo '<ref>' >> unauth_paths_<host>.txt` (re-fire drains at the Step 7 boundary). A `${...}` / `:param` stub is a 7.2(f) segment-swap template, not a literal probe.
-- `ARCHIVE_NESTED: <path>` — the retrieved file is itself an archive → 7.3 loot: extract to a sandbox dir, then re-run the inspector over the extracted tree.
+- `ENDPOINT_REF: <path>: <ref>` — new attack surface → `echo '<ref>' >> unauth_paths_<host>.txt` (re-fire drains at the Step 8 boundary). A `${...}` / `:param` stub is a 8.2(f) segment-swap template, not a literal probe.
+- `ARCHIVE_NESTED: <path>` — the retrieved file is itself an archive → 8.3 loot: extract to a sandbox dir, then re-run the inspector over the extracted tree.
 - `MANUAL_REVIEW: <path>` — file read OK; eyeball the local copy at `inspect_<ip>_<port>/…` for what the regexes do not catch (stack traces, framework hints, usernames, source disclosure in `.bak` / `.old` / `.orig` / `~`).
 - `FLAG: <path>: <value>` — CTF flag.
 - `READ_FAIL: <path>: <reason>` — retrieval or read failed; NOT a no-match. Re-fetch manually if the hit looked live.
@@ -664,27 +719,27 @@ Route per marker:
   - When creds recovered downstream, re-attempt via authed request
 - `NO_403_HITS` — feroxbuster found no 403s on this target.
 
-##### (f) `.git` metadata — surface for git-dumper (out of Step 7 scope):
+##### (f) `.git` metadata — surface for git-dumper (out of Step 8 scope):
 
-`out=$(grep -E '/\.git/(HEAD|config|index)$' hits_<ip>_$port.txt); if [ -n "$out" ]; then echo "$out" | while read u; do echo "GIT_LEAK: $u — run 'git-dumper <base_git_url> ./gitdump-<ip>' (out of Step 7)"; done; else echo "NO_GIT_LEAK"; fi`
+`out=$(grep -E '/\.git/(HEAD|config|index)$' hits_<ip>_$port.txt); if [ -n "$out" ]; then echo "$out" | while read u; do echo "GIT_LEAK: $u — run 'git-dumper <base_git_url> ./gitdump-<ip>' (out of Step 8)"; done; else echo "NO_GIT_LEAK"; fi`
 
 Route per marker:
 
 - `GIT_LEAK: <url>` — `.git` metadata exposed:
   - Log for audit trail: `echo 'GIT_LEAK: <url>' >> route_<ip>.txt`
   - Run `git-dumper <base_git_url> ./gitdump-<ip>` — recover source tree
-  - Grep recovered tree for creds/endpoints/framework hints (out of Step 7 scope)
+  - Grep recovered tree for creds/endpoints/framework hints (out of Step 8 scope)
 - `NO_GIT_LEAK` — no `.git` metadata exposed. No action.
 
-Then → 7.2.
+Then → 8.2.
 
-### 7.2 API endpoint enumeration
+### 8.2 API endpoint enumeration
 
-> **STATUS (this sub-step): AUDITED** — re-derived 2026-10-12 from first principles + primary sources re-read this session: OWASP WSTG `12-API_Testing/01-API_Reconnaissance` and PortSwigger _API testing_. Both order discovery as spec/docs → passive → observed traffic → client-side code → **active brute last**; this sub-step follows that order. Supersedes the prior feroxbuster-first 7.2 and the deferred positional-fuzz build. Derivation + what changed: [[API Endpoint Discovery - Brute-Force Limits]].
+> **STATUS (this sub-step): AUDITED** — re-derived 2026-10-12 from first principles + primary sources re-read this session: OWASP WSTG `12-API_Testing/01-API_Reconnaissance` and PortSwigger _API testing_. Both order discovery as spec/docs → passive → observed traffic → client-side code → **active brute last**; this sub-step follows that order. Supersedes the prior feroxbuster-first 8.2 and the deferred positional-fuzz build. Derivation + what changed: [[API Endpoint Discovery - Brute-Force Limits]].
 
 > ⚠️ **Blind path brute cannot assemble a deep, custom, sparsely-routed endpoint.** A path that is not a literal wordlist entry and whose parents 404 is never requested — recursion needs each rung non-404, and a REST backend routes only the leaf. Property of the technique, not a tuning gap. Consequence for this sub-step: **brute is the backstop, not the primary method** — (a)–(d) below carry the yield; (e)/(f) are the sweep. Full derivation: [[API Endpoint Discovery - Brute-Force Limits]].
 
-All discovered endpoints append to `unauth_api_paths_<host>.txt` — this host's API attack surface. (g) classifies every entry, then merges the file into `unauth_paths_<host>.txt`, where the Step 7 boundary re-fire dispatches Passive Recon (Step 3), Input Surface (Step 4) and Auth-form processing (Step 5) over each.
+All discovered endpoints append to `unauth_api_paths_<host>.txt` — this host's API attack surface. (g) classifies every entry, then merges the file into `unauth_paths_<host>.txt`, where the Step 8 boundary re-fire dispatches Passive Recon (Step 3), Input Surface (Step 5) and Auth-form processing (Step 6) over each.
 
 ---
 
@@ -703,7 +758,7 @@ All discovered endpoints append to `unauth_api_paths_<host>.txt` — this host's
 
 Route per marker:
 
-- `SPEC_FOUND: <url>` — every documented endpoint appended to `unauth_api_paths_<host>.txt`. Highest yield in 7.2. Also probe the spec's **older versions** (`/v1/`, `/v2/` siblings of the found path) — deprecated-but-live endpoints.
+- `SPEC_FOUND: <url>` — every documented endpoint appended to `unauth_api_paths_<host>.txt`. Highest yield in 8.2. Also probe the spec's **older versions** (`/v1/`, `/v2/` siblings of the found path) — deprecated-but-live endpoints.
 - `SPEC_VERSION: <url>: <version>` — apply **Version-discovery route**.
 - `SPEC_YAML_MANUAL: <url>` — jq parses JSON only; read the YAML by eye, append its `paths:` keys to `unauth_api_paths_<host>.txt`.
 - `NOT_SPEC: <url>` — 200 but not a spec document (usually the Swagger-UI HTML shell, not its backing JSON). Its spec is a separate candidate; no action.
@@ -755,13 +810,13 @@ Inspect the harvested tree:
 
 `~/scripts/local_file_inspector.py harvest_<host>_<port>`
 
-Route per marker (contract as 7.1(d)):
+Route per marker (contract as 8.1(d)):
 
 - `ENDPOINT_REF: <path>: <ref>` — split by shape:
     - **Static** ref (no `${...}` / `:param`) → `echo '<ref>' >> unauth_api_paths_<host>.txt`
     - **Dynamic stub** (contains `${...}` or `:param`, e.g. `/api/${id}/update`) → an **(f) segment-swap template**, NOT a literal probe. If the hole is an identifier (`id`/`uuid`/`guid`/`userId`) → [[IDOR]] instead.
     - `/graphql`-shaped → `unauth_api_paths_<host>.txt` + (c) GraphQL routing.
-- `SECRET: <path>: <type>:<value>` — hardcoded secret in a bundle (common). Route by `<type>` per 7.1(d).
+- `SECRET: <path>: <type>:<value>` — hardcoded secret in a bundle (common). Route by `<type>` per 8.1(d).
 - `FILE_CRED: <path>: <match>` — verify (may be a placeholder); real → `echo '<user>:<pass>' >> creds_<host>.txt`.
 - `FLAG: <path>: <value>` — capture; log `FLAG_FOUND: <path>: <value>` to `route_<ip>.txt`.
 - `MANUAL_REVIEW: <path>` — eyeball the bundle; in particular GraphQL operation/field names (`query getAdminFlag {...}`), which are not `/`-paths and will not surface as `ENDPOINT_REF` → [[GraphQL Attacks]].
@@ -855,20 +910,20 @@ Identifier scan on live JSON endpoints:
     - Save the body: `mkdir -p apibodies_${host}_$port; curl -s --max-time 5 -H 'Accept: application/json' "http://$host:$port<path>" -o "apibodies_${host}_$port/$(echo '<path>' | tr '/' '_').json"`
     - Methods: `curl -s -D - -o /dev/null -X OPTIONS "http://<host>:<port><path>" | grep -iE '^(allow|access-control-allow-methods):' || echo "NO_ALLOW_HEADER"`. Any write method listed → probe it per the `WRITE_ONLY_API` branches above.
       **Then, once every `JSON_API` path is saved, as a single run before the merge:**
-    - Inspect all saved bodies: `~/scripts/local_file_inspector.py apibodies_<host>_<port>` → route per marker as 7.1(d).
+    - Inspect all saved bodies: `~/scripts/local_file_inspector.py apibodies_<host>_<port>` → route per marker as 8.1(d).
     - Usernames: `grep -ohiE '"(user|username|login|email|mail|account|owner|handle)"[[:space:]]*:[[:space:]]*"[^"]+"' apibodies_<host>_<port>/*.json | sed 's/.*:[[:space:]]*"//; s/"$//' | sort -u | tee -a users_<host>.txt | grep -q . && echo "API_USERS_HARVESTED" || echo "NO_API_USERS"`
 - `API_IDS: <path> | <ids>` — identifiers in a live response body → [[IDOR]].
     - Dangling dynamic stubs: `grep -nE '(\$\{[a-zA-Z_]+\}|/:[a-zA-Z_]+|/\{[a-zA-Z_]+\})' unauth_api_paths_<host>.txt || echo "NO_DYNAMIC_STUBS"`. Per stub, substitute one `<ids>` value into the hole and probe: `curl -s -o /dev/null -w '%{http_code}\n' "http://<host>:<port><filled_stub>"`. Non-404 → `echo '<filled_stub>' >> unauth_api_paths_<host>.txt`
     - ⚠️ Real engagement: skip any stub matching `(delete|remove|destroy|purge|reset|send|pay|transfer)`; `printf 'DEFERRED: SCOPE_HOLD: <stub>\n' >> route_<ip>.txt`
 - `WRITE_ONLY_API: <path> (POST=<code>)` — write surface.
     - ⚠️ Real engagement: `<path>` matching `(delete|remove|destroy|purge|reset|send|mail|invite|pay|charge|transfer|exec|run|deploy)` → confirm scope before any further request; `printf 'DEFERRED: SCOPE_HOLD: <path>\n' >> route_<ip>.txt`; stop here for this path.
-    - POST=400 / 422 → name the body fields: `curl -s -X POST -H 'Content-Type: application/json' -d '{}' "http://<host>:<port><path>" -o apierr_<host>.json; jq . apierr_<host>.json 2>/dev/null || head -40 apierr_<host>.json`. Read the field names from the output → route each per 4.2. No field names → `printf 'DEFERRED: JSON_FIELDS_UNKNOWN: <path>\n' >> route_<ip>.txt`
+    - POST=400 / 422 → name the body fields: `curl -s -X POST -H 'Content-Type: application/json' -d '{}' "http://<host>:<port><path>" -o apierr_<host>.json; jq . apierr_<host>.json 2>/dev/null || head -40 apierr_<host>.json`. Read the field names from the output → route each per 5.2. No field names → `printf 'DEFERRED: JSON_FIELDS_UNKNOWN: <path>\n' >> route_<ip>.txt`
     - POST=415 → re-probe body formats per [[Request Content-Types by Body Format]]; any non-415 format → re-enter the 400 / 422 branch above
-    - POST=2xx → `printf '[step9-sweep] DEFERRED: STATE_ENDPOINT: <path>\n' >> route_<ip>.txt`
+    - POST=2xx → `printf '[deferred sweep] DEFERRED: STATE_ENDPOINT: <path>\n' >> route_<ip>.txt`
     - `<path>` matching `(login|signin|token|session|authenticate)` → [[Credential Attacks]], JSON body, field names as above
     - `<path>` matching `(register|signup)` → [[Registration Attacks]]. Matching `(forgot|reset|recover)` → [[Password Reset Attacks]]
 - `API_SERVER_ERROR: <path> (status=<code>)` — unhandled error.
-    - Self-inflicted check first: `curl -s -o /dev/null -w '%{http_code}\n' "http://<host>:<port>/" | grep -qE '^(200|30[0-9])$' && echo "HOST_LIVE" || echo "NOT HOST_LIVE"`. `NOT HOST_LIVE` → host degraded by the 7.2(e)/(f) sweeps; `printf 'DEFERRED: API_5XX_SCANNER_INDUCED\n' >> route_<ip>.txt`; discard the whole 5xx set.
+    - Self-inflicted check first: `curl -s -o /dev/null -w '%{http_code}\n' "http://<host>:<port>/" | grep -qE '^(200|30[0-9])$' && echo "HOST_LIVE" || echo "NOT HOST_LIVE"`. `NOT HOST_LIVE` → host degraded by the 8.2(e)/(f) sweeps; `printf 'DEFERRED: API_5XX_SCANNER_INDUCED\n' >> route_<ip>.txt`; discard the whole 5xx set.
     - status=502 / 503 / 504 → upstream, no app body → `printf 'DEFERRED: UPSTREAM_DOWN: <path>\n' >> route_<ip>.txt`
     - status=500 → read the body: `curl -s "http://<host>:<port><path>" | head -60`
         - product / version tokens → **Version-discovery route**
@@ -876,21 +931,21 @@ Identifier scan on live JSON endpoints:
         - absolute filesystem paths → target list for [[Local File Inclusion]] and [[Path Traversal]]
         - a named missing parameter → `echo '<path>?<param>=1' >> unauth_api_paths_<host>.txt`
         - none of the above → `printf 'DEFERRED: 500_OPAQUE: <path>\n' >> route_<ip>.txt`
-- `API_PATHS_PROBED: 0` — 7.2 discovered nothing → 7.3.
+- `API_PATHS_PROBED: 0` — 8.2 discovered nothing → 8.3.
 
-Merge the API surface into the master path list — run last, before the Step 7 boundary:
+Merge the API surface into the master path list — run last, before the Step 8 boundary:
 
 `cat unauth_api_paths_$host.txt >> unauth_paths_$host.txt && sort -u unauth_paths_$host.txt -o unauth_paths_$host.txt`
 
-Then → 7.3.
+Then → 8.3.
 
-### 7.3 Archive / backup / dump discovery
+### 8.3 Archive / backup / dump discovery
 
 > **STATUS: AUDITED** — `archive_enum.py` first-principles derived; `mypy --strict` clean; 68/68 `test_archive_enum.py`; probe→classify→render mechanism sandbox-validated (magic / SQL-sniff / 403 / soft-404-suppression legs all exercised). Live-validation on a real box pending → promote to CANONICAL after THM `Web Server Attacks - I`.
 
-Surfaces archive / backup / dump **loot** (`backup.zip`, `<host>.tar.gz`, `db.sql`, `www.tar.gz`, …) that recursive wordlist brute (7.1) and API enum (7.2) do not target. Discovery only: confirms file identity (magic bytes / Content-Type) and **lists** — it does NOT download bodies, extract, or inspect contents.
+Surfaces archive / backup / dump **loot** (`backup.zip`, `<host>.tar.gz`, `db.sql`, `www.tar.gz`, …) that recursive wordlist brute (8.1) and API enum (8.2) do not target. Discovery only: confirms file identity (magic bytes / Content-Type) and **lists** — it does NOT download bodies, extract, or inspect contents.
 
-Run **after 7.1** so `--paths` consumes the directories 7.1 discovered.
+Run **after 8.1** so `--paths` consumes the directories 8.1 discovered.
 
 #### Invocation
 
@@ -911,24 +966,24 @@ Run **after 7.1** so `--paths` consumes the directories 7.1 discovered.
 - `ARCHIVE_FOUND: <url> [<kind>] <size> (basis=…)` — confirmed archive = **loot**.
     - Log: `echo 'ARCHIVE_FOUND: <url>' >> route_<ip>.txt`
     - Retrieve, extract to a sandbox dir, and inspect: `~/scripts/local_file_inspector.py <dir>` → route its `FILE_CRED` / `SECRET` / `ENDPOINT_REF` / `FLAG` markers. The **extractor** (archive→tree unpack) is the one deferred stage — until built, extract by hand; full design: [[Local File & Tree Inspector]].
-    - **Loot, not surface:** do NOT add `<url>` to `unauth_paths_<host>.txt` (its re-fire consumers — Step 3 reads, Step 4 input enum, Step 5 auth forms — all no-op on an archive). Paths/endpoints found _inside_ the archive on inspection ARE surface → those go to `unauth_paths_<host>.txt` and re-fire at the next Step boundary.
+    - **Loot, not surface:** do NOT add `<url>` to `unauth_paths_<host>.txt` (its re-fire consumers — Step 3 reads, Step 5 input enum, Step 6 auth forms — all no-op on an archive). Paths/endpoints found _inside_ the archive on inspection ARE surface → those go to `unauth_paths_<host>.txt` and re-fire at the next Step boundary.
 - `ARCHIVE_RESTRICTED: <url> (HTTP 401/403 …)` — exists but forbidden. Log `RESTRICTED: <url>` to `route_<ip>.txt`; re-attempt with any credentials recovered downstream.
 - `ARCHIVE_UNCONFIRMED: <url> (200, …)` — 200 but identity not confirmable (generic `octet-stream`, or no magic / not HTML / not SQL). Eyeball manually: `curl -s -r 0-63 "<url>" | xxd | head`. Real archive → treat as `ARCHIVE_FOUND`; otherwise drop.
 - `NO_ARCHIVES_CONFIRMED: <target>` 
 - `SCAN COMPLETE: <N> probed, <c> confirmed, <u> unconfirmed, <r> restricted, <s> soft-404 suppressed, <m> not-found` (+ `, <e> errored` when any probe got no response) — positive scan-completion confirmation. A clean no-hit run is explicit, never a silent prompt-return.
 
-## — Boundary — end of Step 7
+## — Boundary — end of Step 8
 
 → [[#Accumulator re-fire check]]
-→ Step 8
+→ Step 9
 
 ---
 
-## Step 8 — Subdomain enumeration
+## Step 9 — Subdomain enumeration
 
-⚠️ Skip Step 8 entirely if target is IP-only (no domain). Set `<domain>` = target's DNS-resolvable domain (e.g. `example.thm`).
+⚠️ Skip Step 9 entirely if target is IP-only (no domain). Set `<domain>` = target's DNS-resolvable domain (e.g. `example.thm`).
 
-### 8.1 crt.sh
+### 9.1 crt.sh
 
 Browser: `https://crt.sh` — run six searches (replace TLDs to match target):
 
@@ -941,29 +996,29 @@ Browser: `https://crt.sh` — run six searches (replace TLDs to match target):
 
 Route on results:
 
-- Subdomain in CN/SAN not previously known → add to subdomain list for 8.5
-- No new subdomains → 8.2
+- Subdomain in CN/SAN not previously known → add to subdomain list for 9.5
+- No new subdomains → 9.2
 
-### 8.2 DNSDumpster
+### 9.2 DNSDumpster
 
 Browser: `https://dnsdumpster.com` → input `<domain>`.
 
 Route on results:
 
-- New subdomain not previously known → add to subdomain list for 8.5
-- Additional infrastructure host (fqdn + ip, out of foothold scope) → log for lateral movement, 8.3
-- No results → 8.3
+- New subdomain not previously known → add to subdomain list for 9.5
+- Additional infrastructure host (fqdn + ip, out of foothold scope) → log for lateral movement, 9.3
+- No results → 9.3
 
-### 8.3 Gobuster dns
+### 9.3 Gobuster dns
 
 `gobuster dns -d <domain> -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt -o gobuster_dns_<domain>.txt`
 
 Route on output (`grep '^Found:' gobuster_dns_<domain>.txt`):
 
-- Subdomain in `Found:` line → add to subdomain list for 8.5
-- No `Found:` lines → 8.4
+- Subdomain in `Found:` line → add to subdomain list for 9.5
+- No `Found:` lines → 9.4
 
-### 8.4 Gobuster vhost
+### 9.4 Gobuster vhost
 
 `gobuster vhost -u http://<host> -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt --append-domain --domain <domain> -o gobuster_vhost_<host>.txt`
 
@@ -971,12 +1026,12 @@ If flooded by same-length responses, append `--exclude-length <n>` where `<n>` =
 
 Route on output (`grep 'Found:' gobuster_vhost_<host>.txt`):
 
-- Vhost in `Found:` line → add to vhost list for 8.5
-- No `Found:` lines → skip 8.5 and continue
+- Vhost in `Found:` line → add to vhost list for 9.5
+- No `Found:` lines → skip 9.5 and continue
 
-### 8.5 Validate and recurse
+### 9.5 Validate and recurse
 
-For each subdomain / vhost collected from 8.1–8.4:
+For each subdomain / vhost collected from 9.1–9.4:
 
 1. If not resolvable, add to `/etc/hosts`:
 
@@ -992,16 +1047,16 @@ For each subdomain / vhost collected from 8.1–8.4:
 
 ---
 
-## — Boundary — end of Step 8
+## — Boundary — end of Step 9
 
 → [[#Accumulator re-fire check]]
-→ Step 9
+→ Step 10
 
 ---
 
-## Step 9 — Deferred low-EV route sweep
+## Step 10 — Deferred low-EV route sweep
 
-Walks routes deferred by Steps 3-8 sub-blocks that logged DEFERRED entries.
+Walks routes deferred by Steps 3-9 sub-blocks that logged DEFERRED entries.
 
 `grep 'DEFERRED' route_<ip>.txt`
 
@@ -1017,19 +1072,19 @@ No DEFERRED entries → Boundary check.
 
 ---
 
-## — Boundary — end of Step 9
+## — Boundary — end of Step 10
 
 End of unauth walk. Fires once, in sequence:
 
 1. → [[#Accumulator re-fire check]]
-2. Session-establishment opportunity present (`creds_<host>.txt` non-empty OR register form discovered anywhere during Steps 1-9) → [[Authenticated Walk]]
+2. Session-establishment opportunity present (`creds_<host>.txt` non-empty OR register form discovered anywhere during Steps 1-10) → [[Authenticated Walk]]
 3. No session-establishment opportunity OR Auth Walk complete → Exhaustion
 
 ---
 
 ## Exhaustion
 
-Steps 1-9 walked without foothold → return to [[MASTER WORKFLOW/Step 6. Vulnerability Analysis]] Pass 3, next priority service.
+Steps 1-10 walked without foothold → return to [[MASTER WORKFLOW/Step 6. Vulnerability Analysis]] Pass 3, next priority service.
 
 ---
 

