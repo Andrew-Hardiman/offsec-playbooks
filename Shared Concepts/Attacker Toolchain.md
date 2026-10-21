@@ -1,6 +1,8 @@
 
 One-time setup for the attacker box (x64 Kali assumed). Covers the toolchain state technique playbooks assume present. Technique playbooks reference this note via preamble when they depend on non-stock prep; they NEVER provision inline.
 
+---
+
 Per-tier prep required:
 
 | Tier       | Form                                 | Attacker-side prep                  |
@@ -11,8 +13,6 @@ Per-tier prep required:
 | T3         | compile-on-target                    | None (no attacker prep)             |
 | T4         | glibc-static                         | AVOIDED per Vault_Strategy line 153 |
 | cross-arch | applies to T0/T1                     | `gcc-multilib`                      |
-
----
 
 ## T0 — manylinux container compile chain
 
@@ -70,3 +70,40 @@ Expected: `/tmp/t: ELF 64-bit LSB executable, x86-64 ... dynamically linked ...`
 When done with toolchain work, stop BOTH the service AND the socket (the socket auto-activates the service on the next docker command if left running): 
 
 `sudo systemctl stop docker.service docker.socket`
+
+
+
+
+
+---
+## ntlm enabled curl
+
+Produces `~/tools/curl-ntlm/bin/curl`, invoked **by full path only** — never on PATH, never shadows system curl. Stock Kali curl ships NTLM-stripped (`curl -V` lists no `NTLM`), hence this build. Capability boundary: **NTLM only, not `Negotiate`/Kerberos** (no GSS-API backend in this build).
+
+`cd ~/tools`
+
+`sudo apt-get install -y build-essential libssl-dev`
+
+`wget https://curl.se/download/curl-8.22.0.tar.gz`
+
+`wget https://curl.se/download/curl-8.22.0.tar.gz.asc`
+
+`gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys 27EDEAF22F3ABCEB50DB9A125CC908FDB71E12C2`
+
+`gpg --verify curl-8.22.0.tar.gz.asc curl-8.22.0.tar.gz`
+
+`tar xzf curl-8.22.0.tar.gz`
+
+`cd curl-8.22.0`
+
+`./configure --prefix=$HOME/tools/curl-ntlm --with-openssl --enable-ntlm --without-libpsl`
+
+`make -j$(nproc)`
+
+`./src/curl -V`      ......... in order to check `NTLM` is definitely listed under `Features` before the install.
+
+`make install`
+
+Finally verify the full installed binary by full path:
+
+`/home/kali/tools/curl-ntlm/bin/curl -V`
